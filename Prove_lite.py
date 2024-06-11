@@ -228,8 +228,9 @@ if __name__ == '__main__':
 
     BATCH_SIZE = 512
     N_TOP_SENTENCES = 5
-    evidence_df = evidenceSelection(splited_sentences_from_html, BATCH_SIZE, N_TOP_SENTENCES)
-
     SCORE_THRESHOLD = 0
+    evidence_df = evidenceSelection(splited_sentences_from_html, BATCH_SIZE, N_TOP_SENTENCES)
+    result = textEntailment(evidence_df, SCORE_THRESHOLD)
+
     conn.commit()
     conn.close()
