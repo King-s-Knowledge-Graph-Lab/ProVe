@@ -1,7 +1,7 @@
 import gradio as gr
 import Wikidata_Text_Parser as wtr
 import sqlite3
-import Prove_llm as prv
+import CodeArchive.Prove_llm as prv
 import pandas as pd
 
 def wtr_process(qid):
