@@ -10,7 +10,7 @@ from transformers import BertTokenizer, BertForSequenceClassification
 # Constants and paths
 HOME = Path('/users/k2031554')
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-MAX_LEN = 1024
+MAX_LEN = 512
 CLASSES = ['SUPPORTS','REFUTES','NOT ENOUGH INFO']
 METHODS = ['WEIGHTED_SUM', 'MALON']
 

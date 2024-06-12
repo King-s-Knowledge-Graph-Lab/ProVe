@@ -209,6 +209,22 @@ def textEntailment(evidence_df, SCORE_THRESHOLD):
 
     return textual_entailment_df
 
+def TableMaking(verbalised_claims_df_final, result):
+    verbalised_claims_df_final.set_index('reference_id', inplace=True)
+    result.set_index('reference_id', inplace=True)
+    results = pd.concat([verbalised_claims_df_final, result], axis=1)
+    results['triple'] = results[['entity_label', 'property_label', 'object_label']].apply(lambda x: ', '.join(x), axis=1)
+    all_result = pd.DataFrame()
+    for idx, row in results.iterrows():
+        aResult = pd.DataFrame(row["nlp_sentences_TOP_N"])[['sentence','score']]
+        aResult.rename(columns={'score': 'Relevance_score'}, inplace=True)
+        aResult = pd.concat([aResult, pd.DataFrame(row["evidence_TE_labels_all_TOP_N"], columns=['TextEntailment'])], axis=1)
+        aResult = pd.concat([aResult, pd.DataFrame(np.max(row["evidence_TE_prob_all_TOP_N"], axis=1), columns=['Entailment_score'])], axis=1)
+        aResult['triple'] = row["triple"]
+        aResult = aResult.reindex(columns=['triple', 'sentence', 'TextEntailment', 'Entailment_score','Relevance_score'])
+        all_result = pd.concat([all_result,aResult], axis=0)
+    return all_result
+
 if __name__ == '__main__':
     target_QID = 'Q42'
     conn = sqlite3.connect('wikidata_claims_refs_parsed.db')
@@ -231,6 +247,7 @@ if __name__ == '__main__':
     SCORE_THRESHOLD = 0
     evidence_df = evidenceSelection(splited_sentences_from_html, BATCH_SIZE, N_TOP_SENTENCES)
     result = textEntailment(evidence_df, SCORE_THRESHOLD)
-
     conn.commit()
     conn.close()
+    display_df =TableMaking(verbalised_claims_df_final, result)
+
