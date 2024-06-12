@@ -97,8 +97,9 @@ def evidenceSelection(splited_sentences_from_html, BATCH_SIZE, N_TOP_SENTENCES):
     compute_scores('nlp_sentences_slide_2')
 
     def get_top_n_sentences(row, column_name, n):
-        sentences_with_scores = [{'sentence': t[0], 'score': t[1], 'sentence_id': str(j)} for j, t in enumerate(zip(row[column_name], row[f'{column_name}_scores']))]
+        sentences_with_scores = [{'sentence': t[0], 'score': t[1], 'sentence_id': f"{row.name}_{j}"} for j, t in enumerate(zip(row[column_name], row[f'{column_name}_scores']))]
         return sorted(sentences_with_scores, key=lambda x: x['score'], reverse=True)[:n]
+
     
     def filter_overlaps(sentences):
         filtered = []
@@ -111,19 +112,27 @@ def evidenceSelection(splited_sentences_from_html, BATCH_SIZE, N_TOP_SENTENCES):
                 if not any(evidence['sentence_id'] in e['sentence_id'].split(';') for e in filtered):
                     filtered.append(evidence)
         return filtered
+    
+    def limit_sentence_length(sentence, max_length):
+        if len(sentence) > max_length:
+            return sentence[:max_length] + '...'
+        return sentence
 
     nlp_sentences_TOP_N, nlp_sentences_slide_2_TOP_N, nlp_sentences_all_TOP_N = [], [], []
     
     for _, row in tqdm(sentence_relevance_df.iterrows(), total=sentence_relevance_df.shape[0]):
         top_n = get_top_n_sentences(row, 'nlp_sentences', N_TOP_SENTENCES)
+        top_n = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in top_n]
         nlp_sentences_TOP_N.append(top_n)
         
         top_n_slide_2 = get_top_n_sentences(row, 'nlp_sentences_slide_2', N_TOP_SENTENCES)
+        top_n_slide_2 = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in top_n_slide_2]
         nlp_sentences_slide_2_TOP_N.append(top_n_slide_2)
         
         all_sentences = top_n + top_n_slide_2
         all_sentences_sorted = sorted(all_sentences, key=lambda x: x['score'], reverse=True)
         filtered_sentences = filter_overlaps(all_sentences_sorted)
+        filtered_sentences = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in filtered_sentences]
         nlp_sentences_all_TOP_N.append(filtered_sentences[:N_TOP_SENTENCES])
     
     sentence_relevance_df['nlp_sentences_TOP_N'] = pd.Series(nlp_sentences_TOP_N)
@@ -220,22 +229,33 @@ def TableMaking(verbalised_claims_df_final, result):
         aResult.rename(columns={'score': 'Relevance_score'}, inplace=True)
         aResult = pd.concat([aResult, pd.DataFrame(row["evidence_TE_labels_all_TOP_N"], columns=['TextEntailment'])], axis=1)
         aResult = pd.concat([aResult, pd.DataFrame(np.max(row["evidence_TE_prob_all_TOP_N"], axis=1), columns=['Entailment_score'])], axis=1)
-        aResult['triple'] = row["triple"]
-        aResult = aResult.reindex(columns=['triple', 'sentence', 'TextEntailment', 'Entailment_score','Relevance_score'])
-        all_result = pd.concat([all_result,aResult], axis=0)
-    return all_result
+        aResult = aResult.reindex(columns=['sentence', 'TextEntailment', 'Entailment_score','Relevance_score'])
+        aBox = pd.DataFrame({'triple': [row["triple"]], 'url': row['url'],'Results': [aResult]})
+        all_result = pd.concat([all_result,aBox], axis=0)
+
+    def dataframe_to_html(all_result):
+        html = '<html><head><style>table {border-collapse: collapse; width: 100%;} th, td {border: 1px solid black; padding: 8px; text-align: left;} th {background-color: #f2f2f2;}</style></head><body>'
+        for triple in all_result['triple'].unique():
+            html += f'<h3>Triple: {triple}</h3>'
+            df = all_result[all_result['triple']==triple].copy()
+            for idx, row in df.iterrows():
+                url = row['url']
+                results = row['Results']
+                html += f'<h3>Reference: {url}</h3>'
+                html += results.to_html(index=False)
+        html += '</body></html>'
+        return html
+    html_result = dataframe_to_html(all_result)
+    return html_result
 
 if __name__ == '__main__':
-    target_QID = 'Q42'
+    target_QID = 'Q245247'
     conn = sqlite3.connect('wikidata_claims_refs_parsed.db')
     query = f"SELECT * FROM claim_text WHERE entity_id = '{target_QID}'"
     claim_df = pd.read_sql_query(query, conn)
-    
     query = f"SELECT * FROM html_text Where  entity_id = '{target_QID}'"
     reference_text_df = pd.read_sql_query(query, conn)
-    
     verbalised_claims_df_final = verbalisation(claim_df)
-
     progress = gr.Progress(len(verbalised_claims_df_final))  # Create progress bar for Gradio
     def update_progress(curr_step, total_steps):
         progress((curr_step + 1) / total_steps)
@@ -244,10 +264,9 @@ if __name__ == '__main__':
 
     BATCH_SIZE = 512
     N_TOP_SENTENCES = 5
-    SCORE_THRESHOLD = 0
+    SCORE_THRESHOLD = 0.6
     evidence_df = evidenceSelection(splited_sentences_from_html, BATCH_SIZE, N_TOP_SENTENCES)
     result = textEntailment(evidence_df, SCORE_THRESHOLD)
     conn.commit()
     conn.close()
     display_df =TableMaking(verbalised_claims_df_final, result)
-

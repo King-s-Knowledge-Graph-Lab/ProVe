@@ -569,12 +569,12 @@ def textualAugmentation(filtered_df):
     print(' - No object label %:', no_object_label_perc, '%')
     return filtered_df
 
-def urlParser():
+def urlParser(target_QID):
     Wd_API = wdutils.CachedWikidataAPI()
     Wd_API.languages = ['en']
     db = sqlite3.connect('wikidata_claims_refs_parsed.db')
     cursor = db.cursor()
-    refs_columns = ['reference_id', 'reference_property_id', 'reference_index', 'reference_datatype', 'reference_value']
+    refs_columns = ['reference_id','reference_property_id', 'reference_index', 'reference_datatype', 'reference_value']
     cursor.execute('select * from refs where reference_datatype="url";')
     url_df = pd.DataFrame(cursor.fetchall())
     url_df.columns = refs_columns
@@ -610,7 +610,7 @@ def urlParser():
             print(sparql_results)
             raise
     url_df['url'] = url_df.reference_value.apply(reference_value_to_url)
-    cursor.execute('select * from refs where reference_datatype="external-id";')
+    cursor.execute('select * from refs where reference_datatype="url";')
     ext_id_df = pd.DataFrame(cursor.fetchall())
     ext_id_df.columns = refs_columns
     ext_id_df['ext_id'] = ext_id_df.reference_value.apply(reference_value_to_external_id)
@@ -668,16 +668,11 @@ def claim2text(html_set):
     refs_columns = ['reference_id', 'reference_property_id', 'reference_index', 'reference_datatype', 'reference_value']
 
     def reference_id_to_claim_id(reference_id):
-        try:
-            cursor.execute(f'select claim_id from claims_refs where reference_id="{reference_id}"')
-            sql_result = cursor.fetchall()
-            #return sql_result
-            randomly_chosen_claim_id = np.array(sql_result).reshape(-1)
-            return randomly_chosen_claim_id
-        except Exception:
-            print(reference_id)
-            print(sql_result)
-            raise
+        cursor.execute(f'select claim_id from claims_refs where reference_id="{reference_id}"')
+        sql_result = cursor.fetchall()
+        #return sql_result
+        randomly_chosen_claim_id = np.array(sql_result).reshape(-1)
+        return randomly_chosen_claim_id
             
     def reference_id_to_claim_data(reference_id):
         claim_ids = reference_id_to_claim_id(reference_id)
@@ -912,41 +907,23 @@ def html2text(html_set):
 
 if __name__ == '__main__':
     conn = sqlite3.connect('wikidata_claims_refs_parsed.db')
-    target_QID = 'Q42'
-
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='claims'")
-    table_exists = cursor.fetchone()
-    if table_exists:
-        cursor.execute("SELECT entity_id FROM claim_text WHERE entity_id=?", (target_QID,))
-        result = cursor.fetchone()
-        
-        if result:
-            print(f"{target_QID} already exists in the 'claims' table. Skipping execution.")
-        else:
-            claimParser(target_QID) #save results in .db
-            filtered_df = propertyFiltering(target_QID) #update db and return dataframe after filtering
-            url_set = urlParser() #from ref table in .db
-            html_set = htmlParser(url_set, target_QID) #Original html docs collection
-            claim_text = claim2text(html_set) #Claims generation
-            html_text = html2text(html_set)
-            claim_text = claim_text.astype(str)
-            html_text = html_text.astype(str)
-            claim_text.to_sql('claim_text', conn, if_exists='replace', index=False)
-            html_text.to_sql('html_text', conn, if_exists='replace', index=False)
-    else:
-        claimParser(target_QID) #save results in .db
-        filtered_df = propertyFiltering(target_QID) #update db and return dataframe after filtering
-        url_set = urlParser() #from ref table in .db
-        html_set = htmlParser(url_set, target_QID) #Original html docs collection
+    target_QID = 'Q3621696'
+    claimParser(target_QID) #save results in .db
+    filtered_df = propertyFiltering(target_QID) #update db and return dataframe after filtering
+    url_set = urlParser(target_QID) #from ref table in .db
+    html_set = htmlParser(url_set, target_QID) #Original html docs collection
+    try:
         claim_text = claim2text(html_set) #Claims generation
         html_text = html2text(html_set)
         claim_text = claim_text.astype(str)
         html_text = html_text.astype(str)
         claim_text.to_sql('claim_text', conn, if_exists='replace', index=False)
         html_text.to_sql('html_text', conn, if_exists='replace', index=False)
+    except Exception as e:
+        print(f"No accessible html documents")
+        
 
     conn.commit()
     conn.close()
-     #augmented_df = textualAugmentation(filtered_df) #textual information augmentation including label, desc, and alias
+    #augmented_df = textualAugmentation(filtered_df) #textual information augmentation including label, desc, and alias
     
