@@ -7,7 +7,6 @@ from utils.verbalisation_module import VerbModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 from utils.textual_entailment_module import TextualEntailmentModule
 from importlib import reload
-import llm_load
 from html.parser import HTMLParser
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity

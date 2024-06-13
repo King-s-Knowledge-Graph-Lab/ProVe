@@ -15,7 +15,8 @@ from os.path import exists
 from pathlib import Path
 from nltk.tokenize import sent_tokenize
 from sentence_splitter import SentenceSplitter, split_text_into_sentences
-
+import nltk
+nltk.download('punkt')
 
 class DatabaseExtractor():
     def __init__(self, dbname='wikidata_claims_refs_parsed.db'):
@@ -870,6 +871,9 @@ def html2text(html_set):
     splitter = SentenceSplitter(language='en')
 
     seg = pysbd.Segmenter(language="en", clean=False)
+    
+    if not spacy.util.is_package("en_core_web_lg"):
+        os.system("python -m spacy download en_core_web_lg")
 
     nlp = spacy.load("en_core_web_lg")
 
