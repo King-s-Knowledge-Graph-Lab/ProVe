@@ -180,7 +180,6 @@ def claimParser(QID):
     extractor.finish_extraction()
 
 def propertyFiltering(QID):
-    reload(wdutils)
     DB_PATH = 'wikidata_claims_refs_parsed.db'
     claims_columns = ['entity_id','claim_id','rank','property_id','datatype','datavalue']
 
@@ -334,7 +333,9 @@ def propertyFiltering(QID):
         'After all removals, we keep',
         round(last_stage_theme_df_size/original_theme_df_size*100, 2),
     )
+    print(theme_df)
     theme_df.to_sql('claims', db, if_exists='replace', index=False)
+    
 
     return theme_df
 
@@ -641,7 +642,7 @@ def htmlParser(url_set, qid):
 
         print(i, row.url)
         try:
-            response = requests.get(row.url, timeout=10)
+            response = requests.get(row.url, timeout=3)
             if response.status_code == 200:
                 html = response.text
                 text_reference_sampled_df.loc[i, 'html'] = html
@@ -662,7 +663,6 @@ def htmlParser(url_set, qid):
 def claim2text(html_set):
     text_reference_sampled_df_html = html_set
     Wd_API = wdutils.CachedWikidataAPI()
-    Wd_API.languages = ['en']
     db = sqlite3.connect('wikidata_claims_refs_parsed.db')
     cursor = db.cursor()
     claims_columns = ['entity_id','claim_id','rank','property_id','datatype','datavalue']
@@ -696,10 +696,6 @@ def claim2text(html_set):
     claim_df = pd.DataFrame(claim_data, columns = ['reference_id'] + claims_columns)
     claim_df
 
-    def claim_id_to_claim_url(claim_id):
-        claim_id_parts = claim_id.split('$')
-        return f'https://www.wikidata.org/wiki/{claim_id_parts[0]}#{claim_id}'
-
     BAD_DATATYPES = ['external-id','commonsMedia','url', 'globe-coordinate', 'wikibase-lexeme', 'wikibase-property']
 
     assert claim_df[~claim_df.datatype.isin(BAD_DATATYPES)].reference_id.unique().shape\
@@ -712,24 +708,24 @@ def claim2text(html_set):
     tqdm.pandas()
 
     claim_df[['entity_label','entity_label_lan']] = pd.DataFrame(
-        claim_df.entity_id.progress_apply(Wd_API.get_label, non_language_set=True).tolist()
+        claim_df.entity_id.progress_apply(Wd_API.get_label).tolist()
     )
     claim_df[['property_label','property_label_lan']] = pd.DataFrame(
-        claim_df.property_id.progress_apply(Wd_API.get_label, non_language_set=True).tolist()
+        claim_df.property_id.progress_apply(Wd_API.get_label).tolist()
     )
 
     claim_df[['entity_alias','entity_alias_lan']] = pd.DataFrame(
-        claim_df.entity_id.progress_apply(Wd_API.get_alias, non_language_set=True).tolist()
+        claim_df.entity_id.progress_apply(Wd_API.get_alias).tolist()
     )
     claim_df[['property_alias','property_alias_lan']] = pd.DataFrame(
-        claim_df.property_id.progress_apply(Wd_API.get_alias, non_language_set=True).tolist()
+        claim_df.property_id.progress_apply(Wd_API.get_alias).tolist()
     )
 
     claim_df[['entity_desc','entity_desc_lan']] = pd.DataFrame(
-        claim_df.entity_id.progress_apply(Wd_API.get_desc, non_language_set=True).tolist()
+        claim_df.entity_id.progress_apply(Wd_API.get_desc).tolist()
     )
     claim_df[['property_desc','property_desc_lan']] = pd.DataFrame(
-        claim_df.property_id.progress_apply(Wd_API.get_desc, non_language_set=True).tolist()
+        claim_df.property_id.progress_apply(Wd_API.get_desc).tolist()
     )
 
     claim_df['object_label'] = claim_df.apply(get_object_label_given_datatype, axis=1)

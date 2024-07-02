@@ -33,7 +33,7 @@ def verbalisation(claim_df):
     claim_df['verbalisation_unks_replaced_then_dropped'] = claim_df['verbalisation'].apply(lambda x: verb_module.replace_unks_on_sentence(x, empty_after=True))
     return claim_df
 
-def setencesSpliter(verbalised_claims_df_final, reference_text_df, update_progress):
+def setencesSpliter(verbalised_claims_df_final, reference_text_df):
     join_df = pd.merge(verbalised_claims_df_final, reference_text_df[['reference_id', 'url', 'html']], on='reference_id', how='left')
     SS_df = join_df[['reference_id','url','verbalisation', 'html']].copy()
     def clean_html(html_content):
@@ -245,7 +245,7 @@ def TableMaking(verbalised_claims_df_final, result):
         html += '</body></html>'
         return html
     html_result = dataframe_to_html(all_result)
-    return html_result
+    return all_result, html_result
 
 if __name__ == '__main__':
     target_QID = 'Q245247'

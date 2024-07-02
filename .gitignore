@@ -168,3 +168,4 @@ results.csv
 *.sh
 API_key.txt
 *.out
+CodeArchive/
