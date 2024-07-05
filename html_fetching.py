@@ -7,8 +7,12 @@ import yaml, requests, time
 from requests.exceptions import RequestException
 import utils.wikidata_utils as wdutils
 from tqdm import tqdm
-import ast
+import ast, json
 from datetime import datetime
+import re, string, fasttext, pysbd, spacy, os, lxml
+from bs4 import BeautifulSoup
+from spacy.language import Language
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -154,14 +158,7 @@ class HTMLFetcher:
         self.Wd_API.languages = ['en']
         self.BAD_DATATYPES = ['external-id', 'commonsMedia', 'url', 'globe-coordinate', 'wikibase-lexeme', 'wikibase-property']
 
-
-    def __enter__(self):
-        self.conn = sqlite3.connect(self.db_name)
-        self.cursor = self.conn.cursor()
-        self.ensure_url_html_table()
-        return self
-
-    def ensure_url_html_table(self):
+    def ensure_tables(self):
         try:
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS url_html (
@@ -169,22 +166,76 @@ class HTMLFetcher:
                     html TEXT
                 )
             ''')
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS claim_text (
+                    reference_id TEXT,
+                    entity_id TEXT,
+                    claim_id TEXT,
+                    rank TEXT,
+                    property_id TEXT,
+                    datatype TEXT,
+                    datavalue TEXT,
+                    entity_label TEXT,
+                    entity_label_lan TEXT,
+                    entity_alias TEXT,
+                    entity_alias_lan TEXT,
+                    entity_desc TEXT,
+                    entity_desc_lan TEXT,
+                    property_label TEXT,
+                    property_label_lan TEXT,
+                    property_alias TEXT,
+                    property_alias_lan TEXT,
+                    property_desc TEXT,
+                    property_desc_lan TEXT,
+                    object_label TEXT,
+                    object_alias TEXT,
+                    object_desc TEXT,
+                    object_label_lan TEXT,
+                    object_alias_lan TEXT,
+                    object_desc_lan TEXT,
+                    PRIMARY KEY (reference_id, entity_id, claim_id)
+                )
+            ''')
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS html_text (
+                    entity_id TEXT,
+                    reference_id TEXT,
+                    reference_property_id TEXT,
+                    reference_datatype TEXT,
+                    url TEXT,
+                    html TEXT,
+                    extracted_sentences TEXT,
+                    extracted_text TEXT,
+                    nlp_sentences TEXT,
+                    nlp_sentences_slide_2 TEXT,
+                    PRIMARY KEY (entity_id, reference_id, url)
+                )
+            ''')
             self.conn.commit()
-            logging.info("Ensured url_html table exists")
+            logging.info("Ensured all tables exist")
         except sqlite3.Error as e:
-            logging.error(f"An error occurred while ensuring url_html table: {e}")
+            logging.error(f"An error occurred while ensuring tables: {e}")
 
+    def __enter__(self):
+        self.conn = sqlite3.connect(self.db_name)
+        self.cursor = self.conn.cursor()
+        self.ensure_tables()
+        return self
+    
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.conn:
             self.conn.close()
 
-    def reset_table(self):
+    def reset_tables(self):
         try:
             self.cursor.execute("DROP TABLE IF EXISTS url_html")
+            self.cursor.execute("DROP TABLE IF EXISTS claim_text")
+            self.cursor.execute("DROP TABLE IF EXISTS html_text")
             self.conn.commit()
-            self.ensure_url_html_table()
+            self.ensure_tables()
+            logging.info("All tables have been reset")
         except sqlite3.Error as e:
-            logging.error(f"An error occurred while resetting url_html table: {e}")
+            logging.error(f"An error occurred while resetting tables: {e}")
 
     def get_url_references(self, qids: List[str]) -> pd.DataFrame:
         qids_str = ', '.join(f"'{qid}'" for qid in qids)
@@ -298,7 +349,7 @@ class HTMLFetcher:
         return claim_df[claim_df['object_label_lan'] != 'none'].reset_index(drop=True)
 
     def process_qid(self, qid: str) -> pd.DataFrame:
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
 
         try:
@@ -345,25 +396,221 @@ class HTMLFetcher:
         finally:
             conn.close()
 
-    def claim2text(self, qid):       
-        html_set = self.process_qid(qid)
+    def claim2text(self, html_set):       
         claim_df = self.process_claim_data(html_set)
         print(f"Number of unique reference IDs: {claim_df.reference_id.nunique()}")
         return self.add_labels_and_descriptions(claim_df)
+    
+    def store_data_to_db(self, claim_text: pd.DataFrame, html_text: pd.DataFrame):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
 
+        for col in claim_text.columns:
+            claim_text[col] = claim_text[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='claim_text'")
+        if cursor.fetchone() is None:
+            create_claim_table_query = '''
+            CREATE TABLE claim_text (
+                reference_id TEXT,
+                entity_id TEXT,
+                claim_id TEXT,
+                rank TEXT,
+                property_id TEXT,
+                datatype TEXT,
+                datavalue TEXT,
+                entity_label TEXT,
+                entity_label_lan TEXT,
+                entity_alias TEXT,
+                entity_alias_lan TEXT,
+                entity_desc TEXT,
+                entity_desc_lan TEXT,
+                property_label TEXT,
+                property_label_lan TEXT,
+                property_alias TEXT,
+                property_alias_lan TEXT,
+                property_desc TEXT,
+                property_desc_lan TEXT,
+                object_label TEXT,
+                object_alias TEXT,
+                object_desc TEXT,
+                object_label_lan TEXT,
+                object_alias_lan TEXT,
+                object_desc_lan TEXT,
+                PRIMARY KEY (reference_id, entity_id, claim_id)
+            )
+            '''
+            cursor.execute(create_claim_table_query)
+            print("Created new 'claim_text' table.")
+        else:
+            print("'claim_text' table already exists. Appending data.")
+
+        claim_text.to_sql('temp_claim_text', conn, if_exists='replace', index=False)
+        
+        cursor.execute('''
+        INSERT OR REPLACE INTO claim_text
+        SELECT * FROM temp_claim_text
+        ''')
+        
+        cursor.execute('DROP TABLE temp_claim_text')
+        list_columns = ['extracted_sentences', 'nlp_sentences', 'nlp_sentences_slide_2']
+        for col in list_columns:
+            html_text[col] = html_text[col].apply(json.dumps)
+        for col in html_text.columns:
+            if col not in list_columns:
+                html_text[col] = html_text[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='html_text'")
+        if cursor.fetchone() is None:
+            create_html_table_query = '''
+            CREATE TABLE html_text (
+                entity_id TEXT,
+                reference_id TEXT,
+                reference_property_id TEXT,
+                reference_datatype TEXT,
+                url TEXT,
+                html TEXT,
+                extracted_sentences TEXT,
+                extracted_text TEXT,
+                nlp_sentences TEXT,
+                nlp_sentences_slide_2 TEXT,
+                PRIMARY KEY (entity_id, reference_id, url)
+            )
+            '''
+            cursor.execute(create_html_table_query)
+            print("Created new 'html_text' table.")
+        else:
+            print("'html_text' table already exists. Appending data.")
+
+        html_text.to_sql('temp_html_text', conn, if_exists='replace', index=False)
+        
+        cursor.execute('''
+        INSERT OR REPLACE INTO html_text
+        SELECT * FROM temp_html_text
+        ''')
+        
+        cursor.execute('DROP TABLE temp_html_text')
+
+        conn.commit()
+        conn.close()
+        print(f"Data has been successfully stored in the database: {self.db_name}")
+    
+class HTMLTextProcessor:
+    def __init__(self, config_path='config.yaml'):
+        self._RE_COMBINE_WHITESPACE = re.compile(r"\s+")
+        self.ft_model = fasttext.load_model('base/lid.176.ftz')
+        self.splitter = pysbd.Segmenter(language="en", clean=False)
+        if not spacy.util.is_package("en_core_web_lg"):
+            os.system("python -m spacy download en_core_web_lg")
+        self.nlp = spacy.load("en_core_web_lg")
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+
+    def predict_language(self, text: str, k: int = 20) -> List[Tuple[str, float]]:
+        ls, scores = self.ft_model.predict(text, k=k)
+        ls = [l.replace('__label__', '') for l in ls]
+        return list(zip(ls, scores))
+
+    def get_url_language(self, html: str) -> Tuple[str, float]:
+        try:
+            soup = BeautifulSoup(html, "lxml")
+            [s.decompose() for s in soup("script")]
+            if soup.body is None:
+                return ('no body', None)
+            body_text = self._RE_COMBINE_WHITESPACE.sub(" ", soup.body.get_text(' ')).strip()
+            return self.predict_language(body_text, k=1)[0]
+        except Exception as e:
+            print(f"Error in get_url_language: {e}")
+            return ('error', None)
+
+    def clean_text_line_by_line(self, text: str, join: bool = True, ch_join: str = ' ') -> str:
+        lines = [line.strip() for line in text.splitlines()]
+        lines = [re.sub(r' {2,}', ' ', line) for line in lines]
+        lines = [re.sub(r' ([.,:;!?\\-])', r'\1', line) for line in lines]
+        lines = [line + '.' if line and line[-1] not in string.punctuation else line for line in lines]
+        lines = [line for line in lines if line]
+        return ch_join.join(lines) if join else lines
+
+    def apply_manual_rules(self, text: str) -> str:
+        return re.sub(r'\[[0-9]+\]', '', text)
+    
+    def retrieve_text_from_html(self, html: str, soup_parser: str = 'lxml') -> str:
+        if not isinstance(html, str) or not any(tag in html.lower() for tag in ['<html', '<body', '<!doctype html']):
+            return 'No body'
+        
+        try:
+            soup = BeautifulSoup(html, soup_parser)
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            content = soup.body if soup.body else soup
+            
+            for s in content.find_all('strong'):
+                s.unwrap()
+            
+            for p in content.find_all('p'):
+                p.string = self._RE_COMBINE_WHITESPACE.sub(" ", p.get_text('')).strip()
+            
+            text = content.get_text(' ').strip()
+            text = self.apply_manual_rules(text)
+            text = self.clean_text_line_by_line(text, ch_join=' ')
+            
+            return text if text else 'No extractable text'
+        
+        except Exception as e:
+            print(f"Error parsing HTML: {e}")
+            return 'No body'
+
+    def process_dataframe(self, reference_html_df):
+        tqdm.pandas()
+        reference_html_df['extracted_sentences'] = reference_html_df.html.progress_apply(
+            lambda html: self.retrieve_text_from_html(html).split('\n')
+        )
+        reference_html_df['extracted_text'] = reference_html_df.extracted_sentences.apply(' '.join)
+        reference_html_df['nlp_sentences'] = reference_html_df.extracted_text.progress_apply(
+            lambda x: [str(s) for s in self.nlp(x).sents]
+        )
+
+        slide_config = self.config['text_processing']['sentence_slide']
+        if slide_config['enabled']:
+            window_size = slide_config.get('window_size', 2)
+            join_char = slide_config.get('join_char', ' ')
+            
+            reference_html_df[f'nlp_sentences_slide_{window_size}'] = reference_html_df['nlp_sentences'].progress_apply(
+                lambda x: [join_char.join(x[i:i+window_size]) for i in range(len(x) - window_size + 1)]
+            )
+
+        return reference_html_df
+    
+    
+
+def html2text(html_set):
+    processor = HTMLTextProcessor()
+    result_df = processor.process_dataframe(html_set)
+    
+    # Assertions for data integrity
+    assert isinstance(result_df.loc[0, 'nlp_sentences'], list)
+    assert isinstance(result_df.loc[0, 'nlp_sentences'][0], str)
+    assert isinstance(result_df.loc[0, 'nlp_sentences_slide_2'], list)
+    assert isinstance(result_df.loc[0, 'nlp_sentences_slide_2'][0], str)
+    
+    return result_df
 
 def main(qids: List[str],  reset: bool):
     with HTMLFetcher(config=config) as fetcher:
         if reset:
-            fetcher.reset_table()
-        # Fetch URL references for multiple specific entities
+            fetcher.reset_tables()
         url_references_df = fetcher.get_url_references(qids)
         fetcher.create_url_html_table(url_references_df)
-        ###fetcher.fetch_and_update_html()
+        fetcher.fetch_and_update_html()
         for qid in qids: #claim label getting
-            claim_text = fetcher.claim2text(qid)
+            html_set = fetcher.process_qid(qid)
+            claim_text = fetcher.claim2text(html_set)
+            html_text = html2text(html_set)
             
-        
+            fetcher.store_data_to_db(claim_text, html_text)
+            
+
 
 if __name__ == "__main__":
     qids_to_process = ["Q2", "Q42"]

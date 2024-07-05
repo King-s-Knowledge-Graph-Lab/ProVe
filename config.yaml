@@ -14,3 +14,9 @@ html_fetching:
 logging:
   level: 'INFO'
   format: '%(asctime)s - %(levelname)s - %(message)s'
+
+text_processing:
+  sentence_slide:
+    enabled: true
+    window_size: 2  #sliding window for masking sentences
+    join_char: ' ' 
