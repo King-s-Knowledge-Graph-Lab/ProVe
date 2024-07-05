@@ -336,7 +336,6 @@ def propertyFiltering(QID):
     print(theme_df)
     theme_df.to_sql('claims', db, if_exists='replace', index=False)
     
-
     return theme_df
 
 def get_object_label_given_datatype(row):

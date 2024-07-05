@@ -162,6 +162,7 @@ cython_debug/
 
 base/
 RQV_env/
+rqvenv/
 entity_cache.p
 wikidata_claims_refs_parsed.db
 results.csv
