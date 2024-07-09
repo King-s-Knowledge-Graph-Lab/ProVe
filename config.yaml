@@ -20,3 +20,9 @@ text_processing:
     enabled: true
     window_size: 2  #sliding window for masking sentences
     join_char: ' ' 
+
+evidence_selection:
+  batch_size: 512
+  n_top_sentences: 5
+  score_threshold: 0.6
+  token_size: 512
