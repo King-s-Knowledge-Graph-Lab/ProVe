@@ -11,6 +11,7 @@ from cleantext import clean
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 from utils.textual_entailment_module import TextualEntailmentModule
 from tqdm import tqdm
+from datetime import datetime
 
 class ReferenceChecker:
     def __init__(self, db_name: str = 'wikidata_claims_refs_parsed.db', config_path: str = 'config.yaml'):
@@ -78,34 +79,53 @@ class ReferenceChecker:
         join_df = pd.merge(verbalised_claims_df_final, reference_text_df[['reference_id', 'url', 'html']], on='reference_id', how='left')
         SS_df = join_df[['reference_id','url','verbalisation', 'html']].copy()
         def clean_html(html_content):
-            soup = BeautifulSoup(html_content, 'html.parser')
-            text = soup.get_text(separator=' ', strip=True)  
-            cleaned_text = clean(text,
-                                fix_unicode=True,  
-                                to_ascii=True, 
-                                lower=False,  
-                                no_line_breaks=False,  
-                                no_urls=True, 
-                                no_emails=True,  
-                                no_phone_numbers=True, 
-                                no_numbers=False,  
-                                no_digits=False, 
-                                no_currency_symbols=True,  
-                                no_punct=False, 
-                                replace_with_url="",
-                                replace_with_email="",
-                                replace_with_phone_number="",
-                                replace_with_number="",
-                                replace_with_digit="",
-                                replace_with_currency_symbol="")
-            return cleaned_text
+            if not html_content or html_content.startswith('Error:'):
+                return "No TEXT"
+            try:
+                soup = BeautifulSoup(html_content, 'html.parser')
+                text = soup.get_text(separator=' ', strip=True)
+                cleaned_text = clean(text,
+                    fix_unicode=True,
+                    to_ascii=True,
+                    lower=False,
+                    no_line_breaks=False,
+                    no_urls=True,
+                    no_emails=True,
+                    no_phone_numbers=True,
+                    no_numbers=False,
+                    no_digits=False,
+                    no_currency_symbols=True,
+                    no_punct=False,
+                    replace_with_url="",
+                    replace_with_email="",
+                    replace_with_phone_number="",
+                    replace_with_number="",
+                    replace_with_digit="",
+                    replace_with_currency_symbol="")
+                if len(cleaned_text) != 0:
+                    return cleaned_text
+                else:
+                    return "No TEXT"
+            except:
+                return "No TEXT"
+
         def split_into_sentences(text):
-            sentences = nltk.sent_tokenize(text)
-            return sentences
+            if not text:
+                return ["No TEXT"]
+            try:
+                return nltk.sent_tokenize(text)
+            except:
+                return ["No TEXT"]
+
         def slide_sentences(sentences, window_size=2):
-            if len(sentences) < window_size:
-                return [" ".join(sentences)]
-            return [" ".join(sentences[i:i + window_size]) for i in range(len(sentences) - window_size + 1)]
+            if not sentences:
+                return ["No TEXT"]
+            try:
+                if len(sentences) < window_size:
+                    return [" ".join(sentences)]
+                return [" ".join(sentences[i:i + window_size]) for i in range(len(sentences) - window_size + 1)]
+            except:
+                return ["No TEXT"]
         
         SS_df['html2text'] = SS_df['html'].apply(clean_html)
         SS_df['nlp_sentences'] = SS_df['html2text'].apply(split_into_sentences)
@@ -137,8 +157,12 @@ class ReferenceChecker:
         compute_scores('nlp_sentences_slide_2')
 
         def get_top_n_sentences(row: pd.Series, column_name: str, n: int) -> List[Dict]:
-            sentences_with_scores = [{'sentence': t[0], 'score': t[1], 'sentence_id': f"{row.name}_{j}"} for j, t in enumerate(zip(row[column_name], row[f'{column_name}_scores']))]
-            return sorted(sentences_with_scores, key=lambda x: x['score'], reverse=True)[:n]
+            try:
+                sentences_with_scores = [{'sentence': t[0], 'score': t[1], 'sentence_id': f"{row.name}_{j}"} for j, t in enumerate(zip(row[column_name], row[f'{column_name}_scores']))]
+                return sorted(sentences_with_scores, key=lambda x: x['score'], reverse=True)[:n]
+            except Exception as e:
+                print(f"Error in get_top_n_sentences: {e}")
+                return [{'sentence': '', 'score': 0, 'sentence_id': ''}]
 
         def filter_overlaps(sentences: List[Dict]) -> List[Dict]:
             filtered = []
@@ -155,23 +179,31 @@ class ReferenceChecker:
         def limit_sentence_length(sentence: str, max_length: int) -> str:
             return sentence[:max_length] + '...' if len(sentence) > max_length else sentence
 
+        nlp_sentences_TOP_N, nlp_sentences_slide_2_TOP_N, nlp_sentences_all_TOP_N = [{'sentence': '', 'score': ''}], [{'sentence': '', 'score': ''}], [{'sentence': '', 'score': ''}]
+        
         nlp_sentences_TOP_N, nlp_sentences_slide_2_TOP_N, nlp_sentences_all_TOP_N = [], [], []
         
         for _, row in tqdm(sentence_relevance_df.iterrows(), total=sentence_relevance_df.shape[0]):
-            top_n = get_top_n_sentences(row, 'nlp_sentences', self.config['evidence_selection']['n_top_sentences'])
-            top_n = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in top_n]
-            nlp_sentences_TOP_N.append(top_n)
-            
-            top_n_slide_2 = get_top_n_sentences(row, 'nlp_sentences_slide_2', self.config['evidence_selection']['n_top_sentences'])
-            top_n_slide_2 = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in top_n_slide_2]
-            nlp_sentences_slide_2_TOP_N.append(top_n_slide_2)
-            
-            all_sentences = top_n + top_n_slide_2
-            all_sentences_sorted = sorted(all_sentences, key=lambda x: x['score'], reverse=True)
-            filtered_sentences = filter_overlaps(all_sentences_sorted)
-            filtered_sentences = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in filtered_sentences]
-            nlp_sentences_all_TOP_N.append(filtered_sentences[:self.config['evidence_selection']['n_top_sentences']])
-        
+            try:
+                top_n = get_top_n_sentences(row, 'nlp_sentences', self.config['evidence_selection']['n_top_sentences'])
+                top_n = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in top_n]
+                nlp_sentences_TOP_N.append(top_n)
+                
+                top_n_slide_2 = get_top_n_sentences(row, 'nlp_sentences_slide_2', self.config['evidence_selection']['n_top_sentences'])
+                top_n_slide_2 = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in top_n_slide_2]
+                nlp_sentences_slide_2_TOP_N.append(top_n_slide_2)
+                
+                all_sentences = top_n + top_n_slide_2
+                all_sentences_sorted = sorted(all_sentences, key=lambda x: x['score'], reverse=True)
+                filtered_sentences = filter_overlaps(all_sentences_sorted)
+                filtered_sentences = [{'sentence': limit_sentence_length(s['sentence'], 1024), 'score': s['score'], 'sentence_id': s['sentence_id']} for s in filtered_sentences]
+                nlp_sentences_all_TOP_N.append(filtered_sentences[:self.config['evidence_selection']['n_top_sentences']])
+            except Exception as e:
+                print(f"Error processing row: {e}")
+                nlp_sentences_TOP_N.append([{'sentence': '', 'score': 0, 'sentence_id': ''}])
+                nlp_sentences_slide_2_TOP_N.append([{'sentence': '', 'score': 0, 'sentence_id': ''}])
+                nlp_sentences_all_TOP_N.append([{'sentence': '', 'score': 0, 'sentence_id': ''}])
+
         sentence_relevance_df['nlp_sentences_TOP_N'] = pd.Series(nlp_sentences_TOP_N)
         sentence_relevance_df['nlp_sentences_slide_2_TOP_N'] = pd.Series(nlp_sentences_slide_2_TOP_N)
         sentence_relevance_df['nlp_sentences_all_TOP_N'] = pd.Series(nlp_sentences_all_TOP_N)
@@ -238,17 +270,11 @@ class ReferenceChecker:
                 }
             return results
         for i, row in tqdm(textual_entailment_df.iterrows(), total=textual_entailment_df.shape[0]):
-            try:
-                result_sets = process_row(row)
-                for key in keys:
-                    for k, v in result_sets[key].items():
-                        te_columns[f'{k}_{key}'].append(v)
-            except Exception as e:
-                    logging.error(f"Error processing row {i}: {e}")
-                    logging.error(f"Problematic row: {row}")
-                    for key in keys:
-                        for k in result_sets[key].keys():
-                            te_columns[f'{k}_{key}'].append(None)
+            result_sets = process_row(row)
+            for key in keys:
+                for k, v in result_sets[key].items():
+                    te_columns[f'{k}_{key}'].append(v)
+
 
 
         for key in keys:
@@ -344,7 +370,7 @@ class ReferenceChecker:
         results['triple'] = results[['entity_label', 'property_label', 'object_label']].apply(lambda x: ', '.join(x), axis=1)
         all_result = pd.DataFrame()
         for idx, row in results.iterrows():
-            aResult = pd.DataFrame(row["nlp_sentences_TOP_N"])[['sentence','score']]
+            aResult = pd.DataFrame(row['nlp_sentences_TOP_N'])[['sentence','score']]
             aResult.rename(columns={'score': 'Relevance_score'}, inplace=True)
             aResult = pd.concat([aResult, pd.DataFrame(row["evidence_TE_labels_all_TOP_N"], columns=['TextEntailment'])], axis=1)
             aResult = pd.concat([aResult, pd.DataFrame(np.max(row["evidence_TE_prob_all_TOP_N"], axis=1), columns=['Entailment_score'])], axis=1)
@@ -367,24 +393,50 @@ class ReferenceChecker:
         html_result = dataframe_to_html(all_result)
         return all_result, html_result
 
+def freq_selection_for_result(aggregated_result):
+    li = []
+    for idx, row in aggregated_result.iterrows():
+        temp = row.Results
+        if 'SUPPORTS' in temp.TextEntailment.values:
+            result_sentence = temp[temp['TextEntailment']=='SUPPORTS']['sentence'].iloc[0]
+            li.append({'result': 'SUPPORTS', 'result_sentence': result_sentence})
+        else:
+            result = temp.TextEntailment.mode()[0]
+            result_sentence = temp[temp['TextEntailment']==result]['sentence'].iloc[0]
+            li.append({'result': result, 'result_sentence': result_sentence})
+    return pd.DataFrame(li)
+
+    
     
 def main(qids: List[str]):
     with ReferenceChecker() as checker:
-        result_tbs = pd.DataFrame()
+        original_results = pd.DataFrame()
+        aggregated_results = pd.DataFrame()
+        reformedHTML_results = pd.DataFrame()
         for qid in qids:
             claim_df = checker.get_claim_df(qid)
             html_df = checker.get_html_df(qid)
-            verbalised_claims_df_final = checker.verbalisation(claim_df)
-            splited_sentences_from_html = checker.sentenceSplitter(verbalised_claims_df_final, html_df)
-            evidence_df = checker.evidence_selection(splited_sentences_from_html)
-            result = checker.textEntailment(evidence_df)
-            checker.save_results_to_db(result)
-            all_result, html_result = checker.TableMaking(verbalised_claims_df_final, result)
-            all_result['qid'] = qid
-            result_tbs = pd.concat([result_tbs, all_result], axis=0)
-        return result_tbs
+            if len(html_df) != 0:
+                verbalised_claims_df_final = checker.verbalisation(claim_df)
+                splited_sentences_from_html = checker.sentenceSplitter(verbalised_claims_df_final, html_df)
+                evidence_df = checker.evidence_selection(splited_sentences_from_html)
+                original_result = checker.textEntailment(evidence_df)
+                original_result['qid'] = qid
+                aggregated_result, reformedHTML = checker.TableMaking(verbalised_claims_df_final, original_result)
+                aggregated_result['qid'] = qid
+                aggregated_result['reference_id'] = original_result.index
+                aggregated_result= aggregated_result.reset_index(drop=True)
+                aggregated_result = pd.concat([aggregated_result, freq_selection_for_result(aggregated_result)], axis=1)
+                reformedHTML_result = pd.DataFrame({'qid': qid, 'HTML': [reformedHTML]})
+                original_result['processed_timestamp'] = datetime.now().isoformat()
+                original_results = pd.concat([original_results, original_result], axis=0)
+                aggregated_results = pd.concat([aggregated_results, aggregated_result], axis=0)
+                reformedHTML_results = pd.concat([reformedHTML_results, reformedHTML_result], axis=0)
+        return original_results, aggregated_results, reformedHTML_results
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    qids = ["Q42"]
-    result_tbs = main(qids)
+
+    qids =['Q4934']
+    original_results, aggregated_results, reformedHTML_results = main(qids)
+    

@@ -1,27 +1,24 @@
-import wikidata_reader
-import html_fetching
-import reference_checking
-import pandas as pd
-import os
+import sqlite3
 
-def save_to_csv(result_df, csv_path):
-    if os.path.isfile(csv_path):
-        existing_df = pd.read_csv(csv_path, encoding='utf-8-sig')
-        updated_df = pd.concat([existing_df, result_df], ignore_index=True)
-        updated_df = updated_df.drop_duplicates()
-        updated_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    else:
-        result_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+def get_filtered_data(db_path, table_name, column_name, filter_value):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    query = f"SELECT * FROM {table_name} WHERE {column_name} = ?"
+    cursor.execute(query, (filter_value,))
+    results = cursor.fetchall()
+    conn.close()
+    return results
 
-def prove_process(qids):
-    csv_path = "APIresult.csv"
-    wikidata_reader.main(qids, wikidata_reader.config['parsing']['reset_database'])
-    html_fetching.main(qids, html_fetching.config)
-    result = reference_checking.main(qids)
-    save_to_csv(result, csv_path)
-    return result
 
-if __name__ == "__main__":
-    qids = ["Q42"]
-    result = prove_process(qids)   
+db_path = 'reference_checked.db'
+qid = 'Q2539'
+table_name = 'status'
+column_name = 'qid'
 
+
+##Funtions Examples
+#1. checking the queue
+data_df = get_filtered_data(db_path, 'status', 'status', 'in queue')
+
+#2. get a list of completed
+data_df = get_filtered_data(db_path, 'status', 'status', 'in queue')

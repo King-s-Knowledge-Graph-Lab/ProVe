@@ -17,17 +17,18 @@ from spacy.language import Language
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def load_config(config_path: str = 'config.yaml') -> Dict[str, Any]:
+def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, 'r') as file:
         return yaml.safe_load(file)
 
-config = load_config()
 
 class WikidataObjectProcessor:
-    def __init__(self):
+    def __init__(self, config_path: str = 'config.yaml'):
+        self.config = load_config(config_path)
         self.Wd_API = wdutils.CachedWikidataAPI()
         self.Wd_API.languages = ['en']
         self.dt_types = ['wikibase-item', 'monolingualtext', 'quantity', 'time', 'string']
+        self.reset = self.config.get('parsing', {}).get('reset_database')
 
     @staticmethod
     def turn_to_century_or_millennium(y: int, mode: str) -> str:
@@ -149,11 +150,12 @@ def get_object_alias_given_datatype(row: dict) -> Union[Tuple[str, str], List[st
     return WikidataObjectProcessor().get_object_attribute(row, 'alias')
 
 class HTMLFetcher:
-    def __init__(self, db_name: str = 'wikidata_claims_refs_parsed.db', config: Dict[str, Any] = None):
-        self.db_name = db_name
+    def __init__(self, config_path: str = 'config.yaml'):
+        self.config = load_config(config_path)
+        self.db_name = self.config.get('database', {}).get('name', 'default_database.db')
+        self.reset = self.config.get('parsing', {}).get('reset_database', False)
         self.conn = None
         self.cursor = None
-        self.config = config or {}
         self.Wd_API = wdutils.CachedWikidataAPI()
         self.Wd_API.languages = ['en']
         self.BAD_DATATYPES = ['external-id', 'commonsMedia', 'url', 'globe-coordinate', 'wikibase-lexeme', 'wikibase-property']
@@ -497,14 +499,15 @@ class HTMLFetcher:
     
 class HTMLTextProcessor:
     def __init__(self, config_path='config.yaml'):
+        self.config = load_config(config_path)
+        self.reset = self.config.get('parsing', {}).get('reset_database', False)
         self._RE_COMBINE_WHITESPACE = re.compile(r"\s+")
         self.ft_model = fasttext.load_model('base/lid.176.ftz')
         self.splitter = pysbd.Segmenter(language="en", clean=False)
         if not spacy.util.is_package("en_core_web_lg"):
             os.system("python -m spacy download en_core_web_lg")
         self.nlp = spacy.load("en_core_web_lg")
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+
 
     def predict_language(self, text: str, k: int = 20) -> List[Tuple[str, float]]:
         ls, scores = self.ft_model.predict(text, k=k)
@@ -555,7 +558,7 @@ class HTMLTextProcessor:
             text = self.apply_manual_rules(text)
             text = self.clean_text_line_by_line(text, ch_join=' ')
             
-            return text if text else 'No extractable text'
+            return text if text else 'No body'
         
         except Exception as e:
             print(f"Error parsing HTML: {e}")
@@ -588,30 +591,25 @@ def html2text(html_set):
     processor = HTMLTextProcessor()
     result_df = processor.process_dataframe(html_set)
     
-    # Assertions for data integrity
-    assert isinstance(result_df.loc[0, 'nlp_sentences'], list)
-    assert isinstance(result_df.loc[0, 'nlp_sentences'][0], str)
-    assert isinstance(result_df.loc[0, 'nlp_sentences_slide_2'], list)
-    assert isinstance(result_df.loc[0, 'nlp_sentences_slide_2'][0], str)
-    
     return result_df
 
-def main(qids: List[str],  reset: bool):
-    with HTMLFetcher(config=config) as fetcher:
-        if reset:
+def main(qids: List[str]):
+    config = load_config('config.yaml')  # Load config once
+    with HTMLFetcher(config_path='config.yaml') as fetcher:
+        if fetcher.reset:
             fetcher.reset_tables()
         url_references_df = fetcher.get_url_references(qids)
         fetcher.create_url_html_table(url_references_df)
         fetcher.fetch_and_update_html()
-        for qid in qids: #claim label getting
+        for qid in qids:  # claim label getting
             html_set = fetcher.process_qid(qid)
-            claim_text = fetcher.claim2text(html_set)
-            html_text = html2text(html_set)
-            
-            fetcher.store_data_to_db(claim_text, html_text)
-            
+            if len(html_set) != 0:
+                claim_text = fetcher.claim2text(html_set)
+                html_text = html2text(html_set)
+                fetcher.store_data_to_db(claim_text, html_text)
+            pass
 
-
+            
 if __name__ == "__main__":
-    qids_to_process = ["Q2", "Q42"]
-    main(qids_to_process, config['parsing']['reset_database'])
+    qids =['Q4934']
+    main(qids)

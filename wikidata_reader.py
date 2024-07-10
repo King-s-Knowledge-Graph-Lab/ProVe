@@ -9,11 +9,6 @@ import sys, subprocess
 import yaml, json, ast
 import utils.wikidata_utils as wdutils
 
-def load_config(config_path: str = 'config.yaml') -> Dict[str, Any]:
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
-
-config = load_config()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -24,16 +19,22 @@ def ensure_spacy_model():
         logging.info("Downloading spaCy model...")
         subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
 
+def load_config(config_path: str) -> Dict[str, Any]:
+    with open(config_path, 'r') as file:
+        return yaml.safe_load(file)
+
 class WikidataParser:
-    def __init__(self, db_name: str = 'wikidata_claims_refs_parsed.db'):
-        self.db_name = db_name
+    def __init__(self, config_path: str = 'config.yaml'):
+        self.config = load_config(config_path)
+        self.db_name = self.config.get('database', {}).get('name')
         self.conn = None
         self.cursor = None
         self.nlp = None
         self.Wd_API = wdutils.CachedWikidataAPI()
         self.Wd_API.languages = ['en']
-        
+        self.reset = self.config.get('parsing', {}).get('reset_database')
 
+    
     def __enter__(self):
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
@@ -348,7 +349,7 @@ class WikidataParser:
 
 def main(qids: List[str], reset: bool = False):
     with WikidataParser() as parser:
-        if reset:
+        if parser.reset:
             parser.reset_database()
         for qid in qids: #batch processing to find claim informaton from Wikdiata
             parser.claimParser(qid)
@@ -359,5 +360,5 @@ def main(qids: List[str], reset: bool = False):
 
 if __name__ == "__main__":
     nltk.download('punkt', quiet=True)
-    qids_to_process = ["Q2", "Q42"]
-    main(qids_to_process, config['parsing']['reset_database'])
+    qids =['Q4934']
+    main(qids)
