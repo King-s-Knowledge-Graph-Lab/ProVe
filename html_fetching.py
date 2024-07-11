@@ -9,10 +9,10 @@ import utils.wikidata_utils as wdutils
 from tqdm import tqdm
 import ast, json
 from datetime import datetime
-import re, string, fasttext, pysbd, spacy, os, lxml
+import re, string, fasttext, pysbd, spacy, os, lxml, time
 from bs4 import BeautifulSoup
 from spacy.language import Language
-
+from json.decoder import JSONDecodeError
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -49,12 +49,6 @@ class WikidataObjectProcessor:
                        'nd' if group[-1] == '2' else 'rd'
         
         return f"{group}{group_suffix} {mode_name}"
-
-    def process_wikibase_item(self, dv: str, attr: str) -> Union[Tuple[str, str], List[str]]:
-        item_id = ast.literal_eval(dv)['value']['id']
-        if attr == 'label':
-            return getattr(self.Wd_API, f'get_{attr}')(item_id, True)
-        return getattr(self.Wd_API, f'get_{attr}')(item_id)
 
     def process_monolingualtext(self, dv: str) -> Tuple[str, str]:
         dv_dict = ast.literal_eval(dv)
@@ -120,34 +114,7 @@ class WikidataObjectProcessor:
     def process_string(self, dv: str) -> Tuple[str, str]:
         return ast.literal_eval(dv)['value'], 'en'
 
-    def get_object_attribute(self, row: dict, attr: str) -> Union[Tuple[str, str], List[str]]:
-        dt, dv = row['datatype'], row['datavalue']
-        
-        if dt not in self.dt_types:
-            raise ValueError(f"Unexpected datatype: {dt}")
-        
-        try:
-            if dt == 'wikibase-item':
-                return self.process_wikibase_item(dv, attr)
-            elif dt == 'monolingualtext':
-                return self.process_monolingualtext(dv) if attr == 'label' else ('no-desc', 'none')
-            elif dt == 'quantity':
-                return self.process_quantity(dv, attr)
-            elif dt == 'time':
-                return self.process_time(dv, attr)
-            elif dt == 'string':
-                return self.process_string(dv) if attr == 'label' else ('no-desc', 'none')
-        except Exception as e:
-            raise ValueError(f"Error processing {attr} for {dt}: {str(e)}")
 
-def get_object_label_given_datatype(row: dict) -> Tuple[str, str]:
-    return WikidataObjectProcessor().get_object_attribute(row, 'label')
-
-def get_object_desc_given_datatype(row: dict) -> Tuple[str, str]:
-    return WikidataObjectProcessor().get_object_attribute(row, 'desc')
-
-def get_object_alias_given_datatype(row: dict) -> Union[Tuple[str, str], List[str]]:
-    return WikidataObjectProcessor().get_object_attribute(row, 'alias')
 
 class HTMLFetcher:
     def __init__(self, config_path: str = 'config.yaml'):
@@ -159,6 +126,7 @@ class HTMLFetcher:
         self.Wd_API = wdutils.CachedWikidataAPI()
         self.Wd_API.languages = ['en']
         self.BAD_DATATYPES = ['external-id', 'commonsMedia', 'url', 'globe-coordinate', 'wikibase-lexeme', 'wikibase-property']
+        self.dt_types = ['wikibase-item', 'monolingualtext', 'quantity', 'time', 'string']
 
     def ensure_tables(self):
         try:
@@ -333,15 +301,164 @@ class HTMLFetcher:
         claim_df = pd.DataFrame(claim_data, columns=['reference_id'] + claims_columns)
         claim_df = claim_df[~claim_df.datatype.isin(self.BAD_DATATYPES)].reset_index(drop=True)
         return claim_df
+    
+    def process_wikibase_item(self, dv: str, attr: str) -> Union[Tuple[str, str], List[str]]:
+        item_id = ast.literal_eval(dv)['value']['id']
+        if attr == 'label':
+            return getattr(self.Wd_API, f'get_{attr}')(item_id, True)
+        return getattr(self.Wd_API, f'get_{attr}')(item_id)
+    
+    def process_time(self, dv: str, attr: str) -> Tuple[str, str]:
+        dv_dict = ast.literal_eval(dv)
+        time, precision = dv_dict['value']['time'], dv_dict['value']['precision']
+        assert dv_dict['value']['after'] == 0 and dv_dict['value']['before'] == 0
 
+        suffix = 'BC' if time[0] == '-' else ''
+        time = time[1:]
+
+        try:
+            parsed_time = datetime.strptime(time, '%Y-00-00T00:00:%SZ')
+        except ValueError:
+            parsed_time = datetime.strptime(time, '%Y-%m-%dT00:00:%SZ')
+
+        if attr in ['desc', 'alias']:
+            return ('no-desc', 'none') if attr == 'desc' else self.get_time_aliases(parsed_time, precision, suffix)
+
+        if precision == 11:  # date
+            return parsed_time.strftime('%d/%m/%Y') + suffix, 'en'
+        elif precision == 10:  # month
+            return parsed_time.strftime("%B of %Y") + suffix, 'en'
+        elif precision == 9:  # year
+            return parsed_time.strftime('%Y') + suffix, 'en'
+        elif precision == 8:  # decade
+            return parsed_time.strftime('%Y')[:-1] + '0s' + suffix, 'en'
+        elif precision == 7:  # century
+            return self.turn_to_century_or_millennium(parsed_time.year, 'C') + suffix, 'en'
+        elif precision == 6:  # millennium
+            return self.turn_to_century_or_millennium(parsed_time.year, 'M') + suffix, 'en'
+        elif precision in [4, 3, 0]:  # hundred thousand, million, billion years
+            timeint = int(parsed_time.strftime('%Y'))
+            scale = {4: 1e5, 3: 1e6, 0: 1e9}[precision]
+            unit = {4: 'hundred thousand', 3: 'million', 0: 'billion'}[precision]
+
+            return f"{round(timeint/scale, 1)} {unit} years {suffix}", 'en'
+        
+    def process_monolingualtext(self, dv: str) -> Tuple[str, str]:
+        dv_dict = ast.literal_eval(dv)
+        return dv_dict['value']['text'], dv_dict['value']['language']
+
+    def process_quantity(self, dv: str, attr: str) -> Tuple[str, str]:
+        dv_dict = ast.literal_eval(dv)
+        amount, unit = dv_dict['value']['amount'], dv_dict['value']['unit']
+        amount = amount[1:] if amount[0] == '+' else amount
+        
+        if str(unit) == '1':
+            return (str(amount), 'en') if attr == 'label' else ('no-desc', 'none')
+        
+        unit_entity_id = unit.split('/')[-1]
+        if attr == 'label':
+            unit_label = self.Wd_API.get_label(unit_entity_id, True)
+            return f"{amount} {unit_label[0]}", unit_label[1]
+        return getattr(self.Wd_API, f'get_{attr}')(unit_entity_id)
+    def process_string(self, dv: str) -> Tuple[str, str]:
+        return ast.literal_eval(dv)['value'], 'en'
+    def get_time_aliases(self, parsed_time: datetime, precision: int, suffix: str) -> Tuple[List[str], str]:
+        if precision == 11:  # date
+            return ([
+                parsed_time.strftime('%-d of %B, %Y') + suffix,
+                parsed_time.strftime('%d/%m/%Y (dd/mm/yyyy)') + suffix,
+                parsed_time.strftime('%b %-d, %Y') + suffix
+            ], 'en')
+        return ('no-alias', 'none')
+    
     def add_labels_and_descriptions(self, claim_df: pd.DataFrame) -> pd.DataFrame:
-        tqdm.pandas()
-        for entity_type in ['entity', 'property']:
-            for attr_type in ['label', 'alias', 'desc']:
-                claim_df[[f'{entity_type}_{attr_type}', f'{entity_type}_{attr_type}_lan']] = pd.DataFrame(
-                    claim_df[f'{entity_type}_id'].progress_apply(getattr(self.Wd_API, f'get_{attr_type}')).tolist()
-                )
+        def query_for_basic(target_id):
+            sparql_query = f"""
+            SELECT ?label ?alias ?description WHERE {{
+            {target_id} rdfs:label ?label.
+            OPTIONAL {{ {target_id} skos:altLabel ?alias. }}
+            OPTIONAL {{ {target_id} schema:description ?description. }}
+            FILTER (lang(?label) = "en")
+            FILTER (lang(?alias) = "en")
+            FILTER (lang(?description) = "en")
+            }}
+            """
+            try:
+                df = self.Wd_API.custom_sparql_query(sparql_query).json()
+                
+                results = df.get('results', {}).get('bindings', [])
+                if results:
+                    first_result = results[0]
+                    label = first_result.get('label', {}).get('value', 'No label')
+                    alias = first_result.get('alias', {}).get('value', 'No alias')
+                    desc = first_result.get('description', {}).get('value', 'No description')
+                else:
+                    label, alias, desc = 'No label', 'No alias', 'No description'
+            except (JSONDecodeError, AttributeError, KeyError):
+                label, alias, desc = 'No label', 'No alias', 'No description'
+            return {'target_id': target_id, 'label': label, 'alias': alias, 'desc': desc}
+        # for 'entity', finding label, alias, desc
+        entity_basic = query_for_basic(f"wd:{claim_df['entity_id'][0]}")
+        claim_df['entity_label'] = entity_basic['label']
+        claim_df['entity_label_lan'] = 'en'
+        claim_df['entity_alias'] = entity_basic['alias']
+        claim_df['entity_alias_lan'] = 'en'
+        claim_df['entity_desc'] = entity_basic['desc']
+        claim_df['entity_desc_lan'] = 'en'
+        # for 'property', finding label, alias, desc
+        property_basic_li = []
+        for prt in claim_df['property_id'].unique():
+            property_basic_li.append(query_for_basic(f"wd:{prt}"))
 
+        property_df = pd.DataFrame(property_basic_li)
+        property_df['property_id'] = property_df['target_id'].str.replace('wd:', '')
+        property_df['label_lan'] = 'en'
+        property_df['alias_lan'] = 'en'
+        property_df['desc_lan'] = 'en'
+
+        result_df = claim_df.merge(property_df[['property_id', 'label', 'alias', 'desc', 'label_lan', 'alias_lan', 'desc_lan']],
+                           on='property_id',
+                           how='left')
+
+        result_df = result_df.rename(columns={
+            'label': 'property_label', 
+            'alias': 'property_alias', 
+            'desc': 'property_desc',
+            'label_lan': 'property_label_lan',
+            'alias_lan': 'property_alias_lan',
+            'desc_lan': 'property_desc_lan'
+        })
+        claim_df = result_df
+
+        def get_object_attribute(row: dict, attr: str) -> Union[Tuple[str, str], List[str]]:
+            dt, dv = row['datatype'], row['datavalue']
+            
+            if dt not in self.dt_types:
+                raise ValueError(f"Unexpected datatype: {dt}")
+            
+            try:
+                if dt == 'wikibase-item':
+                    return self.process_wikibase_item(dv, attr)
+                elif dt == 'monolingualtext':
+                    return self.process_monolingualtext(dv) if attr == 'label' else ('no-desc', 'none')
+                elif dt == 'quantity':
+                    return self.process_quantity(dv, attr)
+                elif dt == 'time':
+                    return self.process_time(dv, attr)
+                elif dt == 'string':
+                    return self.process_string(dv) if attr == 'label' else ('no-desc', 'none')
+            except Exception as e:
+                raise ValueError(f"Error processing {attr} for {dt}: {str(e)}")
+
+
+        def get_object_label_given_datatype(row: dict) -> Tuple[str, str]:
+            return get_object_attribute(row, 'label')
+
+        def get_object_desc_given_datatype(row: dict) -> Tuple[str, str]:
+            return get_object_attribute(row, 'desc')
+
+        def get_object_alias_given_datatype(row: dict) -> Union[Tuple[str, str], List[str]]:
+            return get_object_attribute(row, 'alias')
         claim_df['object_label'] = claim_df.apply(get_object_label_given_datatype, axis=1)
         claim_df['object_alias'] = claim_df.apply(get_object_alias_given_datatype, axis=1)
         claim_df['object_desc'] = claim_df.apply(get_object_desc_given_datatype, axis=1)
@@ -428,10 +545,10 @@ class HTMLFetcher:
                 entity_desc TEXT,
                 entity_desc_lan TEXT,
                 property_label TEXT,
-                property_label_lan TEXT,
                 property_alias TEXT,
-                property_alias_lan TEXT,
                 property_desc TEXT,
+                property_label_lan TEXT,
+                property_alias_lan TEXT,
                 property_desc_lan TEXT,
                 object_label TEXT,
                 object_alias TEXT,
@@ -607,9 +724,9 @@ def main(qids: List[str]):
                 claim_text = fetcher.claim2text(html_set)
                 html_text = html2text(html_set)
                 fetcher.store_data_to_db(claim_text, html_text)
-            pass
+            
 
             
 if __name__ == "__main__":
-    qids =['Q4934']
+    qids =['Q4622']
     main(qids)

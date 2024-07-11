@@ -12,6 +12,7 @@ from utils.sentence_retrieval_module import SentenceRetrievalModule
 from utils.textual_entailment_module import TextualEntailmentModule
 from tqdm import tqdm
 from datetime import datetime
+import torch, gc
 
 class ReferenceChecker:
     def __init__(self, db_name: str = 'wikidata_claims_refs_parsed.db', config_path: str = 'config.yaml'):
@@ -432,6 +433,8 @@ def main(qids: List[str]):
                 original_results = pd.concat([original_results, original_result], axis=0)
                 aggregated_results = pd.concat([aggregated_results, aggregated_result], axis=0)
                 reformedHTML_results = pd.concat([reformedHTML_results, reformedHTML_result], axis=0)
+            torch.cuda.empty_cache()
+            gc.collect()
         return original_results, aggregated_results, reformedHTML_results
 
 if __name__ == "__main__":

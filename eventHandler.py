@@ -148,7 +148,7 @@ def get_random_qids(num_qids=5, max_retries=3, delay=5):
 def update_status(conn, qid, status, algo_version):
     cursor = conn.cursor()
     task_id = str(uuid.uuid4())  # Generate a random UUID
-    start_time = datetime.datetime.now().isoformat()
+    start_time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
     cursor.execute('''
     INSERT INTO status (task_id, qid, status, start_time, algo_version)
     VALUES (?, ?, ?, ?, ?)
@@ -237,11 +237,8 @@ def prove_process(db_path, batch_qids, algo_version):
         if 'conn' in locals():
             conn.close()
 
-    return original_results, aggregated_results, reformedHTML_results
-
-
 def main(db_path, batch_qids, algo_version, Test_mode):
-    reset_database = False  # Developer mode to test, it initialize db for getting clean db
+    reset_database = True  # Developer mode to test, it initialize db for getting clean db
     if reset_database and os.path.exists(db_path):
         os.remove(db_path)
         print(f"Database file {db_path} has been deleted.")
@@ -250,18 +247,19 @@ def main(db_path, batch_qids, algo_version, Test_mode):
 
     while True:
         try:
-            original_results, aggregated_results, reformedHTML_results = prove_process(db_path, batch_qids, algo_version)
+            prove_process(db_path, batch_qids, algo_version)
 
         except Exception as e:
             print(f"An error occurred in the main loop: {e}")
             time.sleep(30)  
+        
 
 
 
 if __name__ == "__main__":
     db_path = 'reference_checked.db'
-    batch_qids = 10
+    batch_qids = 3
     algo_version = '1.0.0'
-    Test_mode = True
+    Test_mode = True #using different temp .db to test code.
     main(db_path, batch_qids, algo_version, Test_mode)
     # nohup python3 eventHandler.py > output.log 2>&1 &

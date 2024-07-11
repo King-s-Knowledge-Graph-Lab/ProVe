@@ -22,7 +22,7 @@ text_processing:
     join_char: ' ' 
 
 evidence_selection:
-  batch_size: 512
+  batch_size: 256
   n_top_sentences: 5
   score_threshold: 0
   token_size: 512

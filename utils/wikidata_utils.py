@@ -170,4 +170,8 @@ class CachedWikidataAPI():
                 #pdb.set_trace()
                 print(res, res.__dict__)
                 raise e
-            
+    
+    def custom_sparql_query(self, sparql_query):
+        wikidata_sparql_url = 'https://query.wikidata.org/sparql'
+        res = requests.get(wikidata_sparql_url, params={"query": sparql_query, "format": "json"})
+        return res
