@@ -238,7 +238,7 @@ def prove_process(db_path, batch_qids, algo_version):
             conn.close()
 
 def main(db_path, batch_qids, algo_version, Test_mode):
-    reset_database = True  # Developer mode to test, it initialize db for getting clean db
+    reset_database = False  # Developer mode to test, it initialize db for getting clean db
     if reset_database and os.path.exists(db_path):
         os.remove(db_path)
         print(f"Database file {db_path} has been deleted.")
