@@ -17,6 +17,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
+import pdb
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -305,7 +306,7 @@ class HTMLFetcher:
                 chrome_options.add_argument("--headless")  
                 chrome_options.add_argument("--no-sandbox")
                 chrome_options.add_argument("--disable-dev-shm-usage")
-                service = Service(ChromeDriverManager().install())
+                service = Service('/usr/bin/chromedriver')
                 driver = webdriver.Chrome(service=service, options=chrome_options)
                 driver.set_page_load_timeout(10) 
                 for i, (url,) in enumerate(urls_to_fetch):
@@ -420,18 +421,35 @@ class HTMLFetcher:
     def add_labels_and_descriptions(self, claim_df: pd.DataFrame) -> pd.DataFrame:
         def query_for_basic(target_id):
             sparql_query = f"""
-            SELECT ?label ?alias ?description WHERE {{
-            {target_id} rdfs:label ?label.
-            OPTIONAL {{ {target_id} skos:altLabel ?alias. }}
-            OPTIONAL {{ {target_id} schema:description ?description. }}
-            FILTER (lang(?label) = "en")
-            FILTER (lang(?alias) = "en")
-            FILTER (lang(?description) = "en")
-            }}
+                SELECT ?label ?labelLang ?alias ?aliasLang ?description ?descLang
+                WHERE {{
+                OPTIONAL {{ 
+                    {target_id} rdfs:label ?label.
+                    FILTER(LANG(?label) IN ("en", "de", "fr", "es", "zh"))
+                    BIND(LANG(?label) AS ?labelLang)
+                }}
+                OPTIONAL {{ 
+                    {target_id} skos:altLabel ?alias. 
+                    FILTER(LANG(?alias) IN ("en", "de", "fr", "es", "zh"))
+                    BIND(LANG(?alias) AS ?aliasLang)
+                }}
+                OPTIONAL {{ 
+                    {target_id} schema:description ?description. 
+                    FILTER(LANG(?description) IN ("en", "de", "fr", "es", "zh"))
+                    BIND(LANG(?description) AS ?descLang)
+                }}
+                }}
+                ORDER BY 
+                (IF(?labelLang = "en", 0, 1)) 
+                ?labelLang 
+                (IF(?aliasLang = "en", 0, 1)) 
+                ?aliasLang 
+                (IF(?descLang = "en", 0, 1)) 
+                ?descLang
+                Limit 3
             """
             try:
                 df = self.Wd_API.custom_sparql_query(sparql_query).json()
-                
                 results = df.get('results', {}).get('bindings', [])
                 if results:
                     first_result = results[0]
@@ -442,6 +460,7 @@ class HTMLFetcher:
                     label, alias, desc = 'No label', 'No alias', 'No description'
             except (JSONDecodeError, AttributeError, KeyError):
                 label, alias, desc = 'No label', 'No alias', 'No description'
+
             return {'target_id': target_id, 'label': label, 'alias': alias, 'desc': desc}
         # for 'entity', finding label, alias, desc
         entity_basic = query_for_basic(f"wd:{claim_df['entity_id'][0]}")
@@ -454,6 +473,7 @@ class HTMLFetcher:
         # for 'property', finding label, alias, desc
         property_basic_li = []
         for prt in claim_df['property_id'].unique():
+
             property_basic_li.append(query_for_basic(f"wd:{prt}"))
 
         property_df = pd.DataFrame(property_basic_li)
@@ -774,5 +794,5 @@ def main(qids: List[str]):
 
             
 if __name__ == "__main__":
-    qids =['Q4622']
+    qids =['Q3095']
     main(qids)

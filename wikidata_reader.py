@@ -360,5 +360,5 @@ def main(qids: List[str], reset: bool = False):
 
 if __name__ == "__main__":
     nltk.download('punkt', quiet=True)
-    qids =['Q4934']
+    qids =['Q3095']
     main(qids)
