@@ -1,5 +1,40 @@
 import sqlite3
 
+#Params.
+db_path = 'reference_checked.db'
+
+#Table summary
+def get_all_tables_and_schemas(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Get all table names
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = cursor.fetchall()
+
+    table_schemas = {}
+    for (table_name,) in tables:
+        cursor.execute(f"PRAGMA table_info({table_name});")
+        schema = cursor.fetchall()
+        table_schemas[table_name] = schema
+
+    conn.close()
+    return table_schemas
+
+def print_schemas(table_schemas):
+    for table_name, schema in table_schemas.items():
+        print(f"\nTable: {table_name}")
+        print("Column Information:")
+        for column in schema:
+            print(f"  Name: {column[1]}, Type: {column[2]}, NotNull: {column[3]}, DefaultVal: {column[4]}, PK: {column[5]}")
+
+table_schemas = get_all_tables_and_schemas(db_path)
+
+
+print("\nSchema information for each table:")
+print_schemas(table_schemas)
+
+#Utils
 def get_filtered_data(db_path, table_name, column_name, filter_value):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -16,8 +51,6 @@ def get_filtered_data(db_path, table_name, column_name, filter_value):
     data = [dict(zip(columns, row)) for row in results]
     return data
 
-
-db_path = 'reference_checked.db'
 
 ##Funtions Examples
 #1. items

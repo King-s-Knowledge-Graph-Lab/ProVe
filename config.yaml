@@ -10,6 +10,7 @@ spacy:
 html_fetching:
   batch_size: 10
   delay: 1.0
+  fetching_driver: 'chrome' #available options: 'chrome' or 'requests'
 
 logging:
   level: 'INFO'

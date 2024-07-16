@@ -13,6 +13,10 @@ import re, string, fasttext, pysbd, spacy, os, lxml, time
 from bs4 import BeautifulSoup
 from spacy.language import Language
 from json.decoder import JSONDecodeError
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import WebDriverException
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -127,6 +131,7 @@ class HTMLFetcher:
         self.Wd_API.languages = ['en']
         self.BAD_DATATYPES = ['external-id', 'commonsMedia', 'url', 'globe-coordinate', 'wikibase-lexeme', 'wikibase-property']
         self.dt_types = ['wikibase-item', 'monolingualtext', 'quantity', 'time', 'string']
+        self.fetching_driver = self.config.get('html_fetching', {}).get('fetching_driver', 'requests')
 
     def ensure_tables(self):
         try:
@@ -234,6 +239,52 @@ class HTMLFetcher:
             logging.error(f"An error occurred while updating url_html table: {e}")
             self.conn.rollback()
 
+    def reading_html_by_requests(self, url: str) -> None:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                html_content = response.text
+            else:
+                html_content = f"Error: HTTP status code {response.status_code}"
+            
+            self.cursor.execute('''
+                UPDATE url_html
+                SET html = ?
+                WHERE url = ?
+            ''', (html_content, url))
+            logging.info(f"Updated HTML for URL: {url}")
+        
+        except RequestException as e:
+            error_message = f"Error: {str(e)}"
+            self.cursor.execute('''
+                UPDATE url_html
+                SET html = ?
+                WHERE url = ?
+            ''', (error_message, url))
+            logging.error(f"Failed to fetch HTML for URL {url}: {error_message}")
+
+    def reading_html_by_chrome(self, driver, url: str) -> None:
+        try:
+            driver.get(url)
+            html_content = driver.page_source
+
+            self.cursor.execute('''
+                UPDATE url_html
+                SET html = ?
+                WHERE url = ?
+            ''', (html_content, url))
+            logging.info(f"Updated HTML for URL: {url}")
+
+        except WebDriverException as e:
+            error_message = f"Error: {str(e)}"
+            self.cursor.execute('''
+                UPDATE url_html
+                SET html = ?
+                WHERE url = ?
+            ''', (error_message, url))
+            logging.error(f"Failed to fetch HTML for URL {url}: {error_message}")
+
+
     def fetch_and_update_html(self):
         batch_size = self.config.get('html_fetching', {}).get('batch_size', 20)
         delay = self.config.get('html_fetching', {}).get('delay', 1.0)
@@ -242,35 +293,30 @@ class HTMLFetcher:
             self.cursor.execute("SELECT url FROM url_html WHERE html IS NULL")
             urls_to_fetch = self.cursor.fetchall()
             
-            for i, (url,) in enumerate(urls_to_fetch):
-                if i > 0 and i % batch_size == 0:
-                    self.conn.commit()
-                    time.sleep(delay)  # Delay to avoid overwhelming the server
+            if self.fetching_driver == 'requests':
+                for i, (url,) in enumerate(urls_to_fetch):
+                    if i > 0 and i % batch_size == 0:
+                        self.conn.commit()
+                        time.sleep(delay)  # Delay to avoid overwhelming the server
 
-                try:
-                    response = requests.get(url, timeout=10)
-                    if response.status_code == 200:
-                        html_content = response.text
-                    else:
-                        html_content = f"Error: HTTP status code {response.status_code}"
+                    self.reading_html_by_requests(url)
+            else:
+                chrome_options = Options()
+                chrome_options.add_argument("--headless")  
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                service = Service(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+                driver.set_page_load_timeout(10) 
+                for i, (url,) in enumerate(urls_to_fetch):
+                    if i > 0 and i % batch_size == 0:
+                        self.conn.commit()
+                        time.sleep(delay)  # Delay to avoid overwhelming the server
+
+                    self.reading_html_by_chrome(driver, url)
+                if 'driver' in locals():
+                    driver.quit()
                     
-                    self.cursor.execute('''
-                        UPDATE url_html
-                        SET html = ?
-                        WHERE url = ?
-                    ''', (html_content, url))
-                    
-                    logging.info(f"Updated HTML for URL: {url}")
-                
-                except RequestException as e:
-                    error_message = f"Error: {str(e)}"
-                    self.cursor.execute('''
-                        UPDATE url_html
-                        SET html = ?
-                        WHERE url = ?
-                    ''', (error_message, url))
-                    logging.error(f"Failed to fetch HTML for URL {url}: {error_message}")
-                
             self.conn.commit()
             logging.info(f"Completed updating HTML for {len(urls_to_fetch)} URLs")
         
