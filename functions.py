@@ -1,5 +1,6 @@
 import sqlite3
-
+import pandas as pd
+from datetime import datetime
 #Params.
 db_path = 'reference_checked.db'
 
@@ -54,10 +55,13 @@ def get_filtered_data(db_path, table_name, column_name, filter_value):
 
 ##Funtions Examples
 #1. items
+#1.1. check the aggregated results for an item (only recent one)
 def GetItem(target_id):
     check_item = get_filtered_data(db_path, 'status', 'qid', f'{target_id}')
     if len(check_item) != 0:
-        getResult_item = get_filtered_data(db_path, 'aggregated_results', 'qid', f'{target_id}')
+        check_item = max(check_item, key=lambda x: datetime.fromisoformat(x['start_time'])) #select recent one
+        getResult_item = get_filtered_data(db_path, 'aggregated_results', 'task_id', check_item['task_id'])
+
         if len(getResult_item) ==0:
             getResult_item = [{'Result':'No available URLs'}]
         else:
@@ -65,9 +69,33 @@ def GetItem(target_id):
             for item in getResult_item:
                 for key in keys_to_remove:
                     item.pop(key, None)
-        return check_item + getResult_item
+        return [check_item] + getResult_item
     else:
         return [{'error': 'not processed yet'}]
+    
+#1.2. calculate the reference healthy value for an item
+#Examples = Q5820 : error/ Q5208 : good/ Q42220 : None.
+def comprehensive_results(target_id):
+    response = GetItem(target_id)
+    if isinstance(response, list) and len(response) > 0:
+        first_item = response[0]
+        if isinstance(first_item, dict):
+            if 'error' in first_item:
+                return 'error'
+            elif 'status' in first_item and first_item['status'] == 'error':
+                return 'Not processed yet'
+            else:
+                details =  pd.DataFrame(response[1:])
+                chekck_value_counts = details['result'].value_counts() 
+                health_value = 1-((chekck_value_counts.get('REFUTES', 0)+ chekck_value_counts.get('NOT ENOUGH INFO', 0)*0.5)/chekck_value_counts.sum())
+                return {'health_value': health_value, 
+                        'REFUTES': details[details['result']=='REFUTES'].to_dict(), 
+                        'NOT ENOUGH INFO': details[details['result']=='NOT ENOUGH INFO'].to_dict(),
+                        'SUPPORTS': details[details['result']=='SUPPORTS'].to_dict()
+                        }
+
+
+
 
 #2. status
 #2.1. checkQueue

@@ -310,6 +310,13 @@ class HTMLFetcher:
                 chrome_options.add_argument("--disable-pdf-viewer")
                 service = Service('/usr/bin/chromedriver')
                 driver = webdriver.Chrome(service=service, options=chrome_options)
+                chrome_options.add_experimental_option("prefs", {
+                    "download.default_directory": "/CodeArchive/payloads/",
+                    "download.prompt_for_download": False,
+                    "download.directory_upgrade": True,
+                    "plugins.always_open_pdf_externally": False,
+                    "safebrowsing.enabled": True
+                })
                 driver.set_page_load_timeout(10) 
                 for i, (url,) in enumerate(urls_to_fetch):
                     if i > 0 and i % batch_size == 0:
