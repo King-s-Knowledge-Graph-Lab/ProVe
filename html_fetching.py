@@ -306,6 +306,8 @@ class HTMLFetcher:
                 chrome_options.add_argument("--headless")  
                 chrome_options.add_argument("--no-sandbox")
                 chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument("--disable-plugins")
+                chrome_options.add_argument("--disable-pdf-viewer")
                 service = Service('/usr/bin/chromedriver')
                 driver = webdriver.Chrome(service=service, options=chrome_options)
                 driver.set_page_load_timeout(10) 
