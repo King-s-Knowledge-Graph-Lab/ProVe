@@ -2,7 +2,7 @@ database:
   name: 'wikidata_claims_refs_parsed.db'
 
 parsing:
-  reset_database: True #This is a developer mode to clean-up DB to test soemthing
+  reset_database: False #This is a developer mode to clean-up DB to test soemthing
 
 spacy:
   model: 'en_core_web_sm'

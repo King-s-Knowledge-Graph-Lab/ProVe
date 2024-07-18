@@ -81,9 +81,23 @@ def comprehensive_results(target_id):
         first_item = response[0]
         if isinstance(first_item, dict):
             if 'error' in first_item:
-                return 'error'
+                return {'health_value': 'processing error', 
+                        'NOT ENOUGH INFO': 'processing error',
+                        'SUPPORTS': 'processing error',
+                        'REFUTES': 'processing error'
+                        }
             elif 'status' in first_item and first_item['status'] == 'error':
-                return 'Not processed yet'
+                return {'health_value': 'processing error', 
+                        'NOT ENOUGH INFO': 'processing error',
+                        'SUPPORTS': 'processing error',
+                        'REFUTES': 'processing error'
+                        }
+            elif response[1].get('Result') == 'No available URLs':
+                return {'health_value': 'No external URLs', 
+                        'NOT ENOUGH INFO': 'No external URLs',
+                        'SUPPORTS': 'No external URLs',
+                        'REFUTES': 'No external URLs'
+                        }
             else:
                 details =  pd.DataFrame(response[1:])
                 chekck_value_counts = details['result'].value_counts() 
@@ -93,8 +107,6 @@ def comprehensive_results(target_id):
                         'NOT ENOUGH INFO': details[details['result']=='NOT ENOUGH INFO'].to_dict(),
                         'SUPPORTS': details[details['result']=='SUPPORTS'].to_dict()
                         }
-
-
 
 
 #2. status

@@ -258,8 +258,8 @@ def main(db_path, batch_qids, algo_version, Test_mode):
 
 if __name__ == "__main__":
     db_path = 'reference_checked.db'
-    batch_qids = 10
-    algo_version = '1.0.1'
+    batch_qids = 3
+    algo_version = '1.0.2'
     Test_mode = True #using different temp .db to test code.
     main(db_path, batch_qids, algo_version, Test_mode)
     # nohup python3 eventHandler.py > output.log 2>&1 &

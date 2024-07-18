@@ -566,8 +566,18 @@ class HTMLFetcher:
 
             # Step 3: Get url references for the found reference_ids
             placeholders = ','.join('?' * len(reference_ids))
-            query = f"SELECT * FROM url_references WHERE reference_id IN ({placeholders})"
-            html_set = pd.read_sql_query(query, conn, params=reference_ids)
+            query = f"""
+            SELECT * FROM url_references 
+            WHERE reference_id IN ({placeholders})
+            AND entity_id = ?
+            """
+            params = reference_ids + [qid]
+            html_set = pd.read_sql_query(query, conn, params=params)
+
+            if html_set.empty:
+                print(f"No URL references found for references of QID: {qid}")
+                return pd.DataFrame()
+
 
             if html_set.empty:
                 print(f"No URL references found for references of QID: {qid}")
@@ -803,5 +813,5 @@ def main(qids: List[str]):
 
             
 if __name__ == "__main__":
-    qids =['Q3095']
+    qids =['Q4616']
     main(qids)
