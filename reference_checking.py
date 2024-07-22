@@ -15,11 +15,11 @@ from datetime import datetime
 import torch, gc
 
 class ReferenceChecker:
-    def __init__(self, db_name: str = 'wikidata_claims_refs_parsed.db', config_path: str = 'config.yaml'):
-        self.db_name = db_name
+    def __init__(self, config_path: str = 'config.yaml'):
+        self.config = self.load_config(config_path)
+        self.db_name = self.config['database']['name']
         self.conn = None
         self.cursor = None
-        self.config = self.load_config(config_path)
         self.verb_module = VerbModule()
         nltk.download('punkt', quiet=True)
 
@@ -376,8 +376,9 @@ class ReferenceChecker:
             aResult = pd.concat([aResult, pd.DataFrame(row["evidence_TE_labels_all_TOP_N"], columns=['TextEntailment'])], axis=1)
             aResult = pd.concat([aResult, pd.DataFrame(np.max(row["evidence_TE_prob_all_TOP_N"], axis=1), columns=['Entailment_score'])], axis=1)
             aResult = aResult.reindex(columns=['sentence', 'TextEntailment', 'Entailment_score','Relevance_score'])
-            aBox = pd.DataFrame({'triple': [row["triple"]], 'url': row['url'],'Results': [aResult]})
+            aBox = pd.DataFrame({'triple': [row["triple"]], 'property_id' : row['property_id'], 'url': row['url'],'Results': [aResult]})
             all_result = pd.concat([all_result,aBox], axis=0)
+            
 
         def dataframe_to_html(all_result):
             html = '<html><head><style>table {border-collapse: collapse; width: 100%;} th, td {border: 1px solid black; padding: 8px; text-align: left;} th {background-color: #f2f2f2;}</style></head><body>'
@@ -439,7 +440,6 @@ def main(qids: List[str]):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    qids =['Q4934']
+    qids =['Q42']
     original_results, aggregated_results, reformedHTML_results = main(qids)
     

@@ -9,6 +9,7 @@ import random
 import datetime
 import time
 import uuid
+import yaml
 
 def save_to_sqlite(result_df, db_path, table_name):
     result_df = result_df.astype(str)
@@ -34,7 +35,7 @@ def save_to_sqlite(result_df, db_path, table_name):
     finally:
         conn.close()
 
-def initialize_database(db_path='reference_checked.db'):
+def initialize_database(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -77,6 +78,7 @@ def initialize_database(db_path='reference_checked.db'):
     CREATE TABLE IF NOT EXISTS aggregated_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         triple TEXT,
+        property_id TEXT,
         url TEXT,
         Results TEXT,
         qid TEXT,
@@ -114,11 +116,21 @@ def initialize_database(db_path='reference_checked.db'):
 def get_random_qids(num_qids=5, max_retries=3, delay=5):
     sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
     sparql.setQuery("""
-    SELECT ?item
-    WHERE {
-      ?item wdt:P31 wd:Q5 .  # Instance of human
-    }
-    LIMIT 1000  # Fetch more items than needed
+        SELECT ?item {
+        SERVICE bd:sample {
+            ?item wikibase:sitelinks [].
+            bd:serviceParam bd:sample.limit "100".
+        }
+            MINUS {?item wdt:P31/wdt:P279* wd:Q4167836.}
+            MINUS {?item wdt:P31/wdt:P279* wd:Q4167410.}
+            MINUS {?item wdt:P31 wd:Q13406463.}
+            MINUS {?item wdt:P31/wdt:P279* wd:Q11266439.}
+            MINUS {?item wdt:P31 wd:Q17633526.}
+            MINUS {?item wdt:P31 wd:Q13442814.}
+            MINUS {?item wdt:P3083 [].}
+            MINUS {?item wdt:P1566 [].}
+            MINUS {?item wdt:P442 [].}
+        }
     """)
     sparql.setReturnFormat(JSON)
 
@@ -237,8 +249,15 @@ def prove_process(db_path, batch_qids, algo_version):
         if 'conn' in locals():
             conn.close()
 
-def main(db_path, batch_qids, algo_version, Test_mode):
-    reset_database = False  # Developer mode to test, it initialize db for getting clean db
+def load_config(config_path: str):
+    with open(config_path, 'r') as file:
+        return yaml.safe_load(file)
+
+
+def main(batch_qids, algo_version):
+    reset_database = True  # Developer mode to test, it initialize db for getting clean db
+    config = load_config('config.yaml')
+    db_path = config['database']['result_db_for_API']
     if reset_database and os.path.exists(db_path):
         os.remove(db_path)
         print(f"Database file {db_path} has been deleted.")
@@ -254,12 +273,8 @@ def main(db_path, batch_qids, algo_version, Test_mode):
             time.sleep(30)  
         
 
-
-
 if __name__ == "__main__":
-    db_path = 'reference_checked.db'
-    batch_qids = 3
-    algo_version = '1.0.2'
-    Test_mode = True #using different temp .db to test code.
-    main(db_path, batch_qids, algo_version, Test_mode)
+    batch_qids = 5
+    algo_version = '1.0.3'
+    main(batch_qids, algo_version)
     # nohup python3 eventHandler.py > output.log 2>&1 &

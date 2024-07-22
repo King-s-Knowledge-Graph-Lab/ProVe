@@ -1,5 +1,6 @@
 database:
-  name: 'wikidata_claims_refs_parsed.db'
+  name: '/hpc/scratch/prj/inf_wqp/wikidata_claims_refs_parsed.db'
+  result_db_for_API: '/hpc/scratch/prj/inf_wqp/reference_checked.db'
 
 parsing:
   reset_database: False #This is a developer mode to clean-up DB to test soemthing

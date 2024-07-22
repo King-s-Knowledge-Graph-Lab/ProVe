@@ -1,8 +1,14 @@
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import yaml
+
 #Params.
-db_path = 'reference_checked.db'
+def load_config(config_path: str):
+    with open(config_path, 'r') as file:
+        return yaml.safe_load(file)
+config = load_config('config.yaml')
+db_path = config['database']['result_db_for_API']
 
 #Table summary
 def get_all_tables_and_schemas(db_path):
@@ -81,10 +87,10 @@ def comprehensive_results(target_id):
         first_item = response[0]
         if isinstance(first_item, dict):
             if 'error' in first_item:
-                return {'health_value': 'processing error', 
-                        'NOT ENOUGH INFO': 'processing error',
-                        'SUPPORTS': 'processing error',
-                        'REFUTES': 'processing error'
+                return {'health_value': 'Not processed yet', 
+                        'NOT ENOUGH INFO': 'Not processed yet',
+                        'SUPPORTS': 'Not processed yet',
+                        'REFUTES': 'Not processed yet'
                         }
             elif 'status' in first_item and first_item['status'] == 'error':
                 return {'health_value': 'processing error', 

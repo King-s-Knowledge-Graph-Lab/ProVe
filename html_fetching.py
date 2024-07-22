@@ -308,15 +308,17 @@ class HTMLFetcher:
                 chrome_options.add_argument("--disable-dev-shm-usage")
                 chrome_options.add_argument("--disable-plugins")
                 chrome_options.add_argument("--disable-pdf-viewer")
-                service = Service('/usr/bin/chromedriver')
-                driver = webdriver.Chrome(service=service, options=chrome_options)
+                chrome_options.add_argument("--disable-extensions")
                 chrome_options.add_experimental_option("prefs", {
-                    "download.default_directory": "/CodeArchive/payloads/",
+                    "download.default_directory": "/dev/null",
                     "download.prompt_for_download": False,
                     "download.directory_upgrade": True,
                     "plugins.always_open_pdf_externally": False,
-                    "safebrowsing.enabled": True
+                    "plugins.plugins_list": [{"enabled": False, "name": "Chrome PDF Viewer"}],
+                    "download_restrictions": 3
                 })
+                service = Service('/usr/bin/chromedriver')
+                driver = webdriver.Chrome(service=service, options=chrome_options)
                 driver.set_page_load_timeout(10) 
                 for i, (url,) in enumerate(urls_to_fetch):
                     if i > 0 and i % batch_size == 0:
@@ -813,5 +815,5 @@ def main(qids: List[str]):
 
             
 if __name__ == "__main__":
-    qids =['Q4616']
+    qids =['Q42']
     main(qids)
