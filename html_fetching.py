@@ -17,7 +17,9 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
-import pdb
+
+import tempfile
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -309,6 +311,7 @@ class HTMLFetcher:
                 chrome_options.add_argument("--disable-plugins")
                 chrome_options.add_argument("--disable-pdf-viewer")
                 chrome_options.add_argument("--disable-extensions")
+                chrome_options.add_argument("--verbose")
                 chrome_options.add_experimental_option("prefs", {
                     "download.default_directory": "/dev/null",
                     "download.prompt_for_download": False,
@@ -457,7 +460,7 @@ class HTMLFetcher:
                 ?aliasLang 
                 (IF(?descLang = "en", 0, 1)) 
                 ?descLang
-                Limit 3
+                Limit 10
             """
             try:
                 df = self.Wd_API.custom_sparql_query(sparql_query).json()
@@ -469,8 +472,10 @@ class HTMLFetcher:
                     desc = first_result.get('description', {}).get('value', 'No description')
                 else:
                     label, alias, desc = 'No label', 'No alias', 'No description'
+                time.sleep(2)
             except (JSONDecodeError, AttributeError, KeyError):
                 label, alias, desc = 'No label', 'No alias', 'No description'
+                time.sleep(2)
 
             return {'target_id': target_id, 'label': label, 'alias': alias, 'desc': desc}
         # for 'entity', finding label, alias, desc
@@ -484,7 +489,6 @@ class HTMLFetcher:
         # for 'property', finding label, alias, desc
         property_basic_li = []
         for prt in claim_df['property_id'].unique():
-
             property_basic_li.append(query_for_basic(f"wd:{prt}"))
 
         property_df = pd.DataFrame(property_basic_li)
@@ -815,5 +819,5 @@ def main(qids: List[str]):
 
             
 if __name__ == "__main__":
-    qids =['Q42']
+    qids =['Q44']
     main(qids)

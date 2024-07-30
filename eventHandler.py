@@ -105,7 +105,8 @@ def initialize_database(db_path):
         qid TEXT,
         status TEXT,
         start_time TEXT,
-        algo_version TEXT
+        algo_version TEXT,
+        request_type TEXT
     )
     """)
 
@@ -157,14 +158,14 @@ def get_random_qids(num_qids=5, max_retries=3, delay=5):
 
 
 
-def update_status(conn, qid, status, algo_version):
+def update_status(conn, qid, status, algo_version, request_type):
     cursor = conn.cursor()
     task_id = str(uuid.uuid4())  # Generate a random UUID
     start_time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
     cursor.execute('''
-    INSERT INTO status (task_id, qid, status, start_time, algo_version)
-    VALUES (?, ?, ?, ?, ?)
-    ''', (task_id, qid, status, start_time, algo_version))
+    INSERT INTO status (task_id, qid, status, start_time, algo_version, request_type)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ''', (task_id, qid, status, start_time, algo_version, request_type))
     conn.commit()
     return task_id
 
@@ -181,7 +182,7 @@ def prove_process(db_path, batch_qids, algo_version):
         if len(get_queued_qids(conn)) < batch_qids:
             qids = get_random_qids(batch_qids)
             for qid in qids:
-                task_id = update_status(conn, qid, "in queue", algo_version)
+                task_id = update_status(conn, qid, "in queue", algo_version, 'random_running')
         queued_tasks = get_queued_qids(conn)[:batch_qids]
         queued_qids = [qid for _, qid, _ in queued_tasks]
         task_ids = [task_id for task_id, _, _ in queued_tasks]
@@ -212,7 +213,7 @@ def prove_process(db_path, batch_qids, algo_version):
                         save_to_sqlite(task_aggregated, db_path, 'aggregated_results')
                     if not task_reformedHTML.empty:
                         task_reformedHTML['task_id'] = task_id
-                        save_to_sqlite(task_reformedHTML, db_path, 'reformedHTML_results')
+                        #save_to_sqlite(task_reformedHTML, db_path, 'reformedHTML_results')
 
                     cursor = task_conn.cursor()
                     cursor.execute('''
@@ -254,10 +255,11 @@ def load_config(config_path: str):
         return yaml.safe_load(file)
 
 
-def main(batch_qids, algo_version):
-    reset_database = True  # Developer mode to test, it initialize db for getting clean db
+def main(batch_qids):
+    reset_database = False  # Developer mode to test, it initialize db for getting clean db
     config = load_config('config.yaml')
     db_path = config['database']['result_db_for_API']
+    algo_version = config['version']['algo_version']
     if reset_database and os.path.exists(db_path):
         os.remove(db_path)
         print(f"Database file {db_path} has been deleted.")
@@ -274,7 +276,7 @@ def main(batch_qids, algo_version):
         
 
 if __name__ == "__main__":
-    batch_qids = 5
-    algo_version = '1.0.3'
-    main(batch_qids, algo_version)
+    batch_qids = 2
+    main(batch_qids)
     # nohup python3 eventHandler.py > output.log 2>&1 &
+    # nohup python3 -u eventHandler.py > output.log 2>&1 &

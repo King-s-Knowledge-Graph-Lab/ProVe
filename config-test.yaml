@@ -1,12 +1,12 @@
 database:
-  name: 'wikidata_claims_refs_parsed.db'
-  result_db_for_API: 'reference_checked.db'
+  name: 'test_wikidata_claims_refs_parsed.db'
+  result_db_for_API: 'test_reference_checked.db'
 
 version:
   algo_version: '1.0.3'
 
 parsing:
-  reset_database: True #This is a developer mode to clean-up DB to test soemthing
+  reset_database: False #This is a developer mode to clean-up DB to test soemthing
 
 spacy:
   model: 'en_core_web_sm'
