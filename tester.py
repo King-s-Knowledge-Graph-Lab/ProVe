@@ -1,90 +1,47 @@
+from functions import generation_worklists
 import pandas as pd
-import numpy as np
-import yaml
+import json
 import sqlite3
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from scipy.stats import boxcox
+from tqdm import tqdm
+worklist = json.loads(generation_worklists())
+q_list = pd.DataFrame(worklist['TOP_Cited_Items'])
 
-#Params.
-def load_config(config_path: str):
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
-config = load_config('config.yaml')
-
-db_path = config['database']['result_db_for_API']
+db_path = 'wikidata_claims_refs_parsed.db'
+conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+cursor = conn.cursor()
 
 
+item_label = []
+url_html = []
+for i in tqdm(q_list['qid']):
+    query = '''
+    SELECT entity_id, property_id, entity_label, entity_desc, property_label, property_alias, reference_id
+    FROM claim_text
+    WHERE entity_id = ?
+    '''
+    cursor.execute(query, (i,))
+    results = pd.DataFrame(cursor.fetchall(), columns=['entity_id', 'property_id', 'entity_label', 'entity_desc', 'property_label', 'property_alias', 'reference_id'])
 
-def get_full_data(db_path, table_name):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    cursor.execute(f"PRAGMA table_info({table_name})")
-    columns = [col[1] for col in cursor.fetchall()]
-    
-    query = f"SELECT * FROM {table_name}"
-    cursor.execute(query)
-    results = cursor.fetchall()
-    conn.close()
-    data = [dict(zip(columns, row)) for row in results]
-    return data
+    query = '''
+    SELECT entity_id, reference_id, url, html
+    FROM html_text
+    WHERE entity_id = ?
+    '''
+    cursor.execute(query, (i,))
+    results_2 = pd.DataFrame(cursor.fetchall(), columns=['entity_id', 'reference_id', 'url', 'html'])
+    item_label.append(results)
+    url_html.append(results_2)
 
-def finding_latest_entries(full_df):
-    latest_tasks = full_df.groupby('qid').apply(lambda x: x.loc[x.index.max()])
-    task_list = latest_tasks['task_id'].tolist()
-    latest_entries = full_df[full_df['task_id'].isin(task_list)]
-    return latest_entries
 
-full_df = pd.DataFrame(get_full_data(db_path, 'aggregated_results')).set_index('id')
-latest_entries = finding_latest_entries(full_df)
-values_counts = latest_entries.groupby('qid')['result'].value_counts().unstack(fill_value=0)
+final_item_label = pd.concat(item_label, ignore_index=True)
+final_url_html = pd.concat(url_html, ignore_index=True)
 
-df = values_counts.copy()
-def plot_distributions(df, title):
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    fig.suptitle(title)
-    for i, col in enumerate(df.columns):
-        axes[i].hist(df[col], bins=20, density=True)
-        axes[i].set_title(col)
-    plt.tight_layout()
-    plt.show()
+q_list.to_csv('CodeArchive/top_bad_items.csv', index=False, encoding='utf-8-sig')
+final_item_label.to_csv('CodeArchive/item_label.csv', index=False, encoding='utf-8-sig')
+final_url_html.to_csv('CodeArchive/url_html.csv', index=False, encoding='utf-8-sig')
 
-plot_distributions(df, "Original Distributions")
-
-# 1. Min-Max Scaling
-scaler = MinMaxScaler()
-df_minmax = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
-plot_distributions(df_minmax, "Min-Max Scaled Distributions")
-
-# 2. Z-Score Normalization
-scaler = StandardScaler()
-df_zscore = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
-plot_distributions(df_zscore, "Z-Score Normalized Distributions")
-
-# 3. Log Transformation
-df_log = df.apply(lambda x: np.log1p(x))
-plot_distributions(df_log, "Log Transformed Distributions")
-
-# 4. Box-Cox Transformation
-df_boxcox = df.copy()
-for col in df_boxcox.columns:
-    df_boxcox[col], _ = boxcox(df_boxcox[col] + 1)  # 값이 0 이상이어야 함
-plot_distributions(df_boxcox, "Box-Cox Transformed Distributions")
-
-# Boxplot for all transformations
-plt.figure(figsize=(15, 10))
-df_melted = pd.melt(df, var_name='Result', value_name='Original')
-df_melted['Min-Max'] = pd.melt(df_minmax)['value']
-df_melted['Z-Score'] = pd.melt(df_zscore)['value']
-df_melted['Log'] = pd.melt(df_log)['value']
-df_melted['Box-Cox'] = pd.melt(df_boxcox)['value']
-
-df_melted_long = pd.melt(df_melted, id_vars=['Result'], var_name='Transformation', value_name='Value')
-
-sns.boxplot(x='Result', y='Value', hue='Transformation', data=df_melted_long)
-plt.title('Distribution of Values for Each Result and Transformation')
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.tight_layout()
-plt.show()
+merged_results = pd.merge(final_item_label, final_url_html[['reference_id', 'url', 'html']], 
+                        on='reference_id', 
+                        how='left')
+final_results = pd.concat(merged_results, ignore_index=True)
+#final_results.to_csv('CodeArchive/top_bad_items_urls.csv', index=False, encoding='utf-8-sig')

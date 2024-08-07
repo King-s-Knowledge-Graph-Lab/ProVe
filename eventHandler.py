@@ -114,7 +114,7 @@ def initialize_database(db_path):
     conn.commit()
     conn.close()
 
-def get_random_qids(num_qids=5, max_retries=3, delay=5):
+def get_random_qids(num_qids, max_retries, delay):
     sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
     sparql.setQuery("""
         SELECT ?item {
@@ -156,7 +156,28 @@ def get_random_qids(num_qids=5, max_retries=3, delay=5):
 
     return []  # This line should never be reached, but it's here for completeness
 
+def get_popular_connected_qids(num_qids):
+    file_path = 'CodeArchive/prior_item_list.csv'  # Add .csv extension
+    url = "https://quarry.wmcloud.org/run/888614/output/0/csv"
+    def format_qid(qid):
+        return 'Q' + str(qid).lstrip('Q')
+    if os.path.exists(file_path):
+        df = pd.read_csv(file_path)
+        df['qid'] = df['qid'].apply(format_qid)  # Ensure correct QID format when reading
+    else:
+        df = pd.read_csv(url)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        df = df.rename(columns={'ips_item_id': 'qid', 'count(i.ips_site_id)': 'N_connected_site'})
+        df['qid'] = df['qid'].apply(format_qid)  # Format QID correctly
 
+    df_sorted = df.sort_values('N_connected_site', ascending=False).reset_index(drop=True)
+    top_n = df_sorted.head(num_qids)
+    df_remaining = df_sorted[num_qids:]
+    top_n_qids = top_n['qid'].tolist()
+    df_remaining.to_csv(file_path, index=False)
+    return top_n_qids
+    
+    
 
 def update_status(conn, qid, status, algo_version, request_type):
     cursor = conn.cursor()
@@ -180,7 +201,8 @@ def prove_process(db_path, batch_qids, algo_version):
     try:
         conn = sqlite3.connect(db_path)
         if len(get_queued_qids(conn)) < batch_qids:
-            qids = get_random_qids(batch_qids)
+            qids = get_random_qids(batch_qids, 10, 1)
+            #qids = get_popular_connected_qids(batch_qids)
             for qid in qids:
                 task_id = update_status(conn, qid, "in queue", algo_version, 'random_running')
         queued_tasks = get_queued_qids(conn)[:batch_qids]

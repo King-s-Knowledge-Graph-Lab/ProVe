@@ -8,7 +8,7 @@ import json
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
-
+import requests
 
 
 #Params.
@@ -216,13 +216,25 @@ def finding_latest_entries(full_df):
     latest_entries = full_df[full_df['task_id'].isin(task_list)]
     return latest_entries
 
-def sorting_items_based_on_results(latest_entries, result_label, group_by, top_n):
-    sub_df = latest_entries[latest_entries['result'] == result_label]
+def sorting_items_based_on_results(latest_entries_site, result_label, group_by, top_n):
+    sub_df = latest_entries_site[latest_entries_site['result'] == result_label]
     url_groups = sub_df.groupby(group_by)['url'].apply(list).reset_index(name='url_list')
     item_count = sub_df.groupby(group_by).size().reset_index(name='count')
     merged_df = pd.merge(item_count, url_groups, on=group_by)
     top_selections = merged_df.sort_values('count', ascending=False).head(top_n)
     return top_selections.drop('url_list', axis=1)
+
+def sorting_items_based_on_site(latest_entries_site):
+    result_counts = latest_entries_site.groupby('qid')['result'].value_counts().unstack(fill_value=0)
+    result_counts.columns.name = None
+    result_counts = result_counts.reset_index()
+    url = "https://quarry.wmcloud.org/run/888614/output/0/csv"
+    df = pd.read_csv(url)
+    df = df.rename(columns={'ips_item_id': 'qid', 'count(i.ips_site_id)': 'N_connected_site'})
+    df['qid'] = 'Q' + df['qid'].astype(str)
+    merged_df = result_counts.merge(df, on='qid', how='left').sort_values('N_connected_site')
+    return merged_df
+
 
 def extract_domain(url):
     parsed_url = urlparse(url)
@@ -235,13 +247,21 @@ def generation_worklists():
     full_df = pd.DataFrame(get_full_data(db_path, 'aggregated_results')).set_index('id')
     latest_entries = finding_latest_entries(full_df)
     latest_entries['url_domain'] = latest_entries['url'].apply(extract_domain)
+    url = "https://quarry.wmcloud.org/run/888614/output/0/csv"
+    df = pd.read_csv(url)
+    df = df.rename(columns={'ips_item_id': 'qid', 'count(i.ips_site_id)': 'N_connected_site'})
+    df['qid'] = 'Q' + df['qid'].astype(str)
+    merged_df = latest_entries.merge(df, on='qid', how='left')
+    latest_entries_site = merged_df.sort_values('N_connected_site')
+    grouped_table = sorting_items_based_on_site(latest_entries_site)
+    grouped_table = grouped_table.sort_values('REFUTES', ascending=False)
+    grouped_table = grouped_table.sort_values('N_connected_site', ascending=False)
     result = {
-        'TOP_NOT_ENOUGH_INFO_ITEMS': dataframe_to_json(sorting_items_based_on_results(latest_entries, 'NOT ENOUGH INFO', 'qid', 100)),
-        'TOP_REFUTES_ITEMS': dataframe_to_json(sorting_items_based_on_results(latest_entries, 'REFUTES', 'qid', 100)),
-        'TOP_NOT_ENOUGH_INFO_PROP': dataframe_to_json(sorting_items_based_on_results(latest_entries, 'NOT ENOUGH INFO', 'qid', 100)),
-        'TOP_REFUTES_ITEMS_PROP': dataframe_to_json(sorting_items_based_on_results(latest_entries, 'REFUTES', 'qid', 100)),
+        'TOP_Cited_Items': dataframe_to_json(grouped_table)
     }
     return json.dumps(result)
+
+
 
 def plot_status():
     def extract_hour(x):
