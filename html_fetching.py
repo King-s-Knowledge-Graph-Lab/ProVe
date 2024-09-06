@@ -20,6 +20,7 @@ from selenium.common.exceptions import WebDriverException
 
 import tempfile
 import os
+import pdb
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -269,6 +270,7 @@ class HTMLFetcher:
     def reading_html_by_chrome(self, driver, url: str) -> None:
         try:
             driver.get(url)
+            time.sleep(1)
             html_content = driver.page_source
 
             self.cursor.execute('''
@@ -322,7 +324,7 @@ class HTMLFetcher:
                 })
                 service = Service('/usr/bin/chromedriver')
                 driver = webdriver.Chrome(service=service, options=chrome_options)
-                driver.set_page_load_timeout(10) 
+                driver.set_page_load_timeout(20) 
                 for i, (url,) in enumerate(urls_to_fetch):
                     if i > 0 and i % batch_size == 0:
                         self.conn.commit()
@@ -460,11 +462,13 @@ class HTMLFetcher:
                 ?aliasLang 
                 (IF(?descLang = "en", 0, 1)) 
                 ?descLang
-                Limit 10
+                Limit 30
             """
             try:
+                pdb.set_trace()
                 df = self.Wd_API.custom_sparql_query(sparql_query).json()
                 results = df.get('results', {}).get('bindings', [])
+                time.sleep(2)
                 if results:
                     first_result = results[0]
                     label = first_result.get('label', {}).get('value', 'No label')
@@ -476,8 +480,8 @@ class HTMLFetcher:
             except (JSONDecodeError, AttributeError, KeyError):
                 label, alias, desc = 'No label', 'No alias', 'No description'
                 time.sleep(2)
-
             return {'target_id': target_id, 'label': label, 'alias': alias, 'desc': desc}
+        
         # for 'entity', finding label, alias, desc
         entity_basic = query_for_basic(f"wd:{claim_df['entity_id'][0]}")
         claim_df['entity_label'] = entity_basic['label']
@@ -819,5 +823,5 @@ def main(qids: List[str]):
 
             
 if __name__ == "__main__":
-    qids =['Q44']
+    qids =['Q816695']
     main(qids)

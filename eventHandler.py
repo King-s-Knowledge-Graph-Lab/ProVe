@@ -197,15 +197,20 @@ def get_queued_qids(conn):
 
 def prove_process(db_path, batch_qids, algo_version):
     original_results, aggregated_results, reformedHTML_results = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-    
+
     try:
         conn = sqlite3.connect(db_path)
         if len(get_queued_qids(conn)) < batch_qids:
-            qids = get_random_qids(batch_qids, 10, 1)
-            #qids = get_popular_connected_qids(batch_qids)
+            """
+            #qids = get_random_qids(batch_qids, 10, 1)
+            #qids = get_popular_connected_qids(batch_qids)  
             for qid in qids:
                 task_id = update_status(conn, qid, "in queue", algo_version, 'random_running')
-        queued_tasks = get_queued_qids(conn)[:batch_qids]
+            """
+        qids = get_popular_connected_qids(batch_qids)  
+        for qid in qids:
+            task_id = update_status(conn, qid, "in queue", algo_version, 'from_pagepile')
+        queued_tasks = get_queued_qids(conn)[:batch_qids] 
         queued_qids = [qid for _, qid, _ in queued_tasks]
         task_ids = [task_id for task_id, _, _ in queued_tasks]
         print(f"Tasks in queue: {queued_tasks}")
@@ -253,6 +258,7 @@ def prove_process(db_path, batch_qids, algo_version):
 
         else:
             print("No QIDs in queue to process.")
+            time.sleep(4)
 
 
     except KeyboardInterrupt:
