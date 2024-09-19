@@ -17,6 +17,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
+from urllib.parse import quote
 
 import tempfile
 import os
@@ -465,10 +466,18 @@ class HTMLFetcher:
                 Limit 30
             """
             try:
-                pdb.set_trace()
-                df = self.Wd_API.custom_sparql_query(sparql_query).json()
+                url = 'https://query.wikidata.org/sparql'
+                params = {
+                    'query': sparql_query,
+                    'format': 'json'
+                }
+
+                headers = {
+                    'User-Agent': 'Python-SPARQL-Query/1.0 (https://example.com/; username@example.com)'
+                }
+                response = requests.get(url, params=params, headers=headers)
+                df = response.json()
                 results = df.get('results', {}).get('bindings', [])
-                time.sleep(2)
                 if results:
                     first_result = results[0]
                     label = first_result.get('label', {}).get('value', 'No label')
@@ -476,10 +485,8 @@ class HTMLFetcher:
                     desc = first_result.get('description', {}).get('value', 'No description')
                 else:
                     label, alias, desc = 'No label', 'No alias', 'No description'
-                time.sleep(2)
             except (JSONDecodeError, AttributeError, KeyError):
                 label, alias, desc = 'No label', 'No alias', 'No description'
-                time.sleep(2)
             return {'target_id': target_id, 'label': label, 'alias': alias, 'desc': desc}
         
         # for 'entity', finding label, alias, desc
