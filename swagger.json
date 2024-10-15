@@ -1,0 +1,310 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ProVe API",
+    "description": "This API allows users to interact with the ProVe backend for various tasks, such as checking the queue, completed items, errors, and requesting processing for specific items.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://kclwqt.sites.er.kcl.ac.uk",
+      "description": "ProVe API Server"
+    }
+  ],
+  "paths": {
+    "/api/task/checkQueue": {
+      "get": {
+        "summary": "Check queue",
+        "description": "Returns the current queue of the ProVe backend.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inline_response_200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task/checkCompleted": {
+      "get": {
+        "summary": "Check completed items",
+        "description": "Returns the completed items of the ProVe process.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inline_response_200_1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task/checkErrors": {
+      "get": {
+        "summary": "Check errors",
+        "description": "Returns the list of items that weren't processed successfully in the ProVe backend.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inline_response_200_2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/getSimpleResult": {
+      "get": {
+        "summary": "Get simple result for the item",
+        "description": "Returns the representative results of ProVe for the item with the given Q-id.",
+        "parameters": [
+          {
+            "name": "qid",
+            "in": "query",
+            "description": "The Q-id of the item to get results for.",
+            "required": true,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "string",
+              "example": "Q42"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inline_response_200_3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/getCompResult": {
+      "get": {
+        "summary": "Get all results for the item",
+        "description": "Returns all results of ProVe for the item with the given Q-id.",
+        "parameters": [
+          {
+            "name": "qid",
+            "in": "query",
+            "description": "The Q-id of the item to get all results for.",
+            "required": true,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "string",
+              "example": "Q42"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inline_response_200_4"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/checkItemStatus": {
+      "get": {
+        "summary": "Check item status in the ProVe backend",
+        "description": "Returns item status such as 'not processed yet' or 'in queue'.",
+        "parameters": [
+          {
+            "name": "qid",
+            "in": "query",
+            "description": "The Q-id of the item to check status for.",
+            "required": true,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "string",
+              "example": "Q42"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inline_response_200_5"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/requestItem": {
+      "get": {
+        "summary": "Request ProVe processing for a specific item",
+        "description": "Updates the current queue to include the given Q-id from the user.",
+        "parameters": [
+          {
+            "name": "qid",
+            "in": "query",
+            "description": "The Q-id of the item to be processed.",
+            "required": true,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "string",
+              "example": "Q42"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inline_response_200_6"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "inline_response_200": {
+        "type": "object",
+        "properties": {
+          "queue": {
+            "type": "array",
+            "example": [
+              "Q1",
+              "Q2",
+              "Q3"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "inline_response_200_1": {
+        "type": "object",
+        "properties": {
+          "completedItems": {
+            "type": "array",
+            "example": [
+              "Q42",
+              "Q123",
+              "Q456"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "inline_response_200_2": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "qid": {
+                  "type": "string",
+                  "example": "Q42"
+                },
+                "errorMessage": {
+                  "type": "string",
+                  "example": "Failed to process due to missing reference."
+                }
+              }
+            }
+          }
+        }
+      },
+      "inline_response_200_3": {
+        "type": "object",
+        "properties": {
+          "qid": {
+            "type": "string",
+            "example": "Q42"
+          },
+          "result": {
+            "type": "string",
+            "example": "The item is verified."
+          }
+        }
+      },
+      "inline_response_200_4": {
+        "type": "object",
+        "properties": {
+          "qid": {
+            "type": "string",
+            "example": "Q42"
+          },
+          "results": {
+            "type": "array",
+            "example": [
+              "Result 1",
+              "Result 2",
+              "Result 3"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "inline_response_200_5": {
+        "type": "object",
+        "properties": {
+          "qid": {
+            "type": "string",
+            "example": "Q42"
+          },
+          "status": {
+            "type": "string",
+            "example": "in queue"
+          }
+        }
+      },
+      "inline_response_200_6": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Item Q42 has been added to the queue."
+          }
+        }
+      }
+    }
+  }
+}
