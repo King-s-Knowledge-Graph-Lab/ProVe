@@ -270,16 +270,32 @@ class HTMLFetcher:
 
     def reading_html_by_chrome(self, driver, url: str) -> None:
         try:
-            driver.get(url)
-            time.sleep(1)
-            html_content = driver.page_source
+            response = requests.get(url, timeout=5)
+
+            if response.status_code == 200:
+                driver.get(url)
+                time.sleep(1)
+                html_content = driver.page_source
+
+                logging.info(f"Successfully fetched HTML for URL: {url}")
+            else:
+                html_content = f"Error: HTTP status code {response.status_code}"
+                logging.warning(f"Failed to fetch HTML for URL: {url} - Status code: {response.status_code}")
 
             self.cursor.execute('''
                 UPDATE url_html
                 SET html = ?
                 WHERE url = ?
             ''', (html_content, url))
-            logging.info(f"Updated HTML for URL: {url}")
+
+        except RequestException as e:
+            error_message = f"Error: {str(e)}"
+            self.cursor.execute('''
+                UPDATE url_html
+                SET html = ?
+                WHERE url = ?
+            ''', (error_message, url))
+            logging.error(f"Failed to fetch URL {url}: {error_message}")
 
         except WebDriverException as e:
             error_message = f"Error: {str(e)}"
@@ -288,7 +304,7 @@ class HTMLFetcher:
                 SET html = ?
                 WHERE url = ?
             ''', (error_message, url))
-            logging.error(f"Failed to fetch HTML for URL {url}: {error_message}")
+            logging.error(f"Failed to fetch HTML with Selenium for URL {url}: {error_message}")
 
 
     def fetch_and_update_html(self):

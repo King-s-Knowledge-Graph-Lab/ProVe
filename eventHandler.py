@@ -10,6 +10,7 @@ import datetime
 import time
 import uuid
 import yaml
+import schedule
 
 def save_to_sqlite(result_df, db_path, table_name):
     result_df = result_df.astype(str)
@@ -282,6 +283,15 @@ def load_config(config_path: str):
     with open(config_path, 'r') as file:
         return yaml.safe_load(file)
 
+def update_prior_item_list():
+    pagepile_df = pd.read_csv('CodeArchive/pagepile.csv', header=None)
+    prior_item_list_df = pd.read_csv('CodeArchive/prior_item_list.csv')
+    prior_item_list_df['qid'] = pagepile_df[0]
+
+    prior_item_list_df.to_csv('CodeArchive/prior_item_list.csv', index=False)
+
+    print("prior_item_list.csv has been successfully updated.")
+
 
 def main(batch_qids):
     reset_database = False  # Developer mode to test, it initialize db for getting clean db
@@ -293,11 +303,11 @@ def main(batch_qids):
         print(f"Database file {db_path} has been deleted.")
     
     initialize_database(db_path)
-
+    schedule.every().monday.do(update_prior_item_list)
     while True:
         try:
             prove_process(db_path, batch_qids, algo_version)
-
+            schedule.run_pending()
         except Exception as e:
             print(f"An error occurred in the main loop: {e}")
             time.sleep(30)  

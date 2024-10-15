@@ -119,19 +119,19 @@ def comprehensive_results(target_id):
         first_item = response[0]
         if isinstance(first_item, dict):
             if 'error' in first_item:
-                return {'health_value': 'Not processed yet', 
+                return {'Reference score': 'Not processed yet', 
                         'NOT ENOUGH INFO': 'Not processed yet',
                         'SUPPORTS': 'Not processed yet',
                         'REFUTES': 'Not processed yet'
                         }
             elif 'status' in first_item and first_item['status'] == 'error':
-                return {'health_value': 'processing error', 
+                return {'Reference score': 'processing error', 
                         'NOT ENOUGH INFO': 'processing error',
                         'SUPPORTS': 'processing error',
                         'REFUTES': 'processing error'
                         }
             elif response[1].get('Result') == 'No available URLs':
-                return {'health_value': 'No external URLs', 
+                return {'Reference score': 'No external URLs', 
                         'NOT ENOUGH INFO': 'No external URLs',
                         'SUPPORTS': 'No external URLs',
                         'REFUTES': 'No external URLs'
@@ -139,8 +139,8 @@ def comprehensive_results(target_id):
             else:
                 details =  pd.DataFrame(response[1:])
                 chekck_value_counts = details['result'].value_counts() 
-                health_value = 1-((chekck_value_counts.get('REFUTES', 0)+ chekck_value_counts.get('NOT ENOUGH INFO', 0)*0.5)/chekck_value_counts.sum())
-                return {'health_value': health_value, 
+                health_value = (chekck_value_counts.get('SUPPORTS', 0) - chekck_value_counts.get('REFUTES', 0)) / chekck_value_counts.sum()
+                return {'Reference score': health_value, 
                         'REFUTES': details[details['result']=='REFUTES'].to_dict(), 
                         'NOT ENOUGH INFO': details[details['result']=='NOT ENOUGH INFO'].to_dict(),
                         'SUPPORTS': details[details['result']=='SUPPORTS'].to_dict()
@@ -191,13 +191,13 @@ def check_queue_status(conn, qid):
     count = cursor.fetchone()[0]
     return count > 0
 
-def requestItemProcessing(qid):
+def requestItemProcessing(qid, username):
     conn = None
     try:
         conn = sqlite3.connect(db_path, timeout=100)
         if check_queue_status(conn, qid):
             return f"QID {qid} is already in queue. Skipping..."
-        task_id = update_status(conn, qid, "in queue", algo_version, 'user_request')
+        task_id = update_status(conn, qid, "in queue", algo_version,f'RequestedUserId: {username}')
         queued_tasks = get_queued_qids(conn)
         conn.commit() 
         return f"Task {task_id} created for QID {qid}"
@@ -261,6 +261,14 @@ def generation_worklists():
     }
     return json.dumps(result)
 
+def generation_worklist_pagePile():
+    # Read data from the Excel file
+    file_path = 'CodeArchive/resultPagepile.xlsx'
+    df = pd.read_excel(file_path)
+    
+    # Convert the DataFrame to a dictionary format
+    data_dict = df.to_dict(orient='records')
+    return json.dumps(data_dict, ensure_ascii=False, indent=4)
 
 
 def plot_status():

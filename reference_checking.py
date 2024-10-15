@@ -81,7 +81,7 @@ class ReferenceChecker:
         SS_df = join_df[['reference_id','url','verbalisation', 'html']].copy()
         def clean_html(html_content):
             if not html_content or html_content.startswith('Error:'):
-                return "No TEXT"
+                return str(html_content)
             try:
                 soup = BeautifulSoup(html_content, 'html.parser')
                 text = soup.get_text(separator=' ', strip=True)
