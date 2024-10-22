@@ -316,5 +316,6 @@ def main(batch_qids):
 if __name__ == "__main__":
     batch_qids = 2
     main(batch_qids)
+    
     # nohup python3 eventHandler.py > output.log 2>&1 &
     # nohup python3 -u eventHandler.py > output.log 2>&1 &

@@ -341,3 +341,13 @@ def plot_status():
 
     plot_html = pio.to_html(fig, full_html=True, include_plotlyjs=True)
     return plot_html
+
+def get_config_as_json():
+    """
+    Reads the config.yaml file and returns its contents as JSON.
+    
+    Returns:
+        str: JSON string representation of the config.yaml contents
+    """
+    config = load_config('config.yaml')
+    return json.dumps(config, indent=2)
