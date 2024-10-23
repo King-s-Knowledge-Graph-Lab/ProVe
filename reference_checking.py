@@ -230,14 +230,16 @@ class ReferenceChecker:
             for key in keys:
                 evidence = row[f'nlp_sentences_{key}']
                 evidence_size = len(evidence)
-                if evidence_size == 0:
+                
+                # checking the empty evidence or the error in the evidence
+                if evidence_size == 0 or any('Error: HTTP status code' in e['sentence'] for e in evidence):
                     results[key] = {
                         'evidence_TE_prob': [],
-                        'evidence_TE_labels': [],
+                        'evidence_TE_labels': ['REFUTES'] * evidence_size,
                         'evidence_TE_prob_weighted': [],
-                        'claim_TE_prob_weighted_sum': [0, 0, 0],
-                        'claim_TE_label_weighted_sum': 'NOT ENOUGH INFO',
-                        'claim_TE_label_malon': 'NOT ENOUGH INFO'
+                        'claim_TE_prob_weighted_sum': [0, 1, 0],
+                        'claim_TE_label_weighted_sum': 'REFUTES',
+                        'claim_TE_label_malon': 'REFUTES'
                     }
                     continue
 
@@ -275,8 +277,6 @@ class ReferenceChecker:
             for key in keys:
                 for k, v in result_sets[key].items():
                     te_columns[f'{k}_{key}'].append(v)
-
-
 
         for key in keys:
             for col in ['evidence_TE_prob', 'evidence_TE_prob_weighted', 'evidence_TE_labels',
@@ -440,6 +440,6 @@ def main(qids: List[str]):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    qids =['Q30']
+    qids =['Q44']
     original_results, aggregated_results, reformedHTML_results = main(qids)
     

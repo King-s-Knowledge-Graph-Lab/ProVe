@@ -3,7 +3,7 @@ database:
   result_db_for_API: 'test_reference_checked.db'
 
 version:
-  algo_version: '1.0.3'
+  algo_version: '1.0.4'
 
 parsing:
   reset_database: False #This is a developer mode to clean-up DB to test soemthing
