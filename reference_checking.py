@@ -212,7 +212,7 @@ class ReferenceChecker:
         return sentence_relevance_df
     
     def textEntailment(self, evidence_df):
-        SCORE_THRESHOLD=self.config['evidence_selection']['score_threshold']
+        SCORE_THRESHOLD = self.config['evidence_selection']['score_threshold']
         textual_entailment_df = evidence_df.copy()
         te_module = TextualEntailmentModule()
 
@@ -234,9 +234,9 @@ class ReferenceChecker:
                 # checking the empty evidence or the error in the evidence
                 if evidence_size == 0 or any('Error: HTTP status code' in e['sentence'] for e in evidence):
                     results[key] = {
-                        'evidence_TE_prob': [],
-                        'evidence_TE_labels': ['REFUTES'] * evidence_size,
-                        'evidence_TE_prob_weighted': [],
+                        'evidence_TE_prob': [[0, 1, 0]], 
+                        'evidence_TE_labels': ['REFUTES'],
+                        'evidence_TE_prob_weighted': [[0, 1, 0]], 
                         'claim_TE_prob_weighted_sum': [0, 1, 0],
                         'claim_TE_label_weighted_sum': 'REFUTES',
                         'claim_TE_label_malon': 'REFUTES'
@@ -255,23 +255,25 @@ class ReferenceChecker:
                     if ev['score'] > SCORE_THRESHOLD
                 ]
 
-                claim_TE_prob_weighted_sum = np.sum(evidence_TE_prob_weighted, axis=0) if evidence_TE_prob_weighted else [0, 0, 0]
+                if not evidence_TE_prob_weighted:
+                    evidence_TE_prob_weighted = [[0, 1, 0]]  
 
-                claim_TE_label_weighted_sum = te_module.get_label_from_scores(claim_TE_prob_weighted_sum) if evidence_TE_prob_weighted else 'NOT ENOUGH INFO'
+                claim_TE_prob_weighted_sum = np.sum(evidence_TE_prob_weighted, axis=0)
 
-                claim_TE_label_malon = te_module.get_label_malon(
-                    [probs for probs, ev in zip(evidence_TE_prob, evidence) if ev['score'] > SCORE_THRESHOLD]
-                )
+                claim_TE_label_weighted_sum = te_module.get_label_from_scores(claim_TE_prob_weighted_sum)
+
+                claim_TE_label_malon = te_module.get_label_malon(evidence_TE_prob)
 
                 results[key] = {
                     'evidence_TE_prob': evidence_TE_prob,
                     'evidence_TE_labels': evidence_TE_labels,
                     'evidence_TE_prob_weighted': evidence_TE_prob_weighted,
-                    'claim_TE_prob_weighted_sum': claim_TE_prob_weighted_sum,
+                    'claim_TE_prob_weighted_sum': claim_TE_prob_weighted_sum.tolist(),
                     'claim_TE_label_weighted_sum': claim_TE_label_weighted_sum,
                     'claim_TE_label_malon': claim_TE_label_malon
                 }
             return results
+
         for i, row in tqdm(textual_entailment_df.iterrows(), total=textual_entailment_df.shape[0]):
             result_sets = process_row(row)
             for key in keys:
@@ -374,7 +376,10 @@ class ReferenceChecker:
             aResult = pd.DataFrame(row['nlp_sentences_TOP_N'])[['sentence','score']]
             aResult.rename(columns={'score': 'Relevance_score'}, inplace=True)
             aResult = pd.concat([aResult, pd.DataFrame(row["evidence_TE_labels_all_TOP_N"], columns=['TextEntailment'])], axis=1)
-            aResult = pd.concat([aResult, pd.DataFrame(np.max(row["evidence_TE_prob_all_TOP_N"], axis=1), columns=['Entailment_score'])], axis=1)
+            
+            entailment_scores = [max(prob) for prob in row["evidence_TE_prob_all_TOP_N"]]
+            
+            aResult = pd.concat([aResult, pd.DataFrame(entailment_scores, columns=['Entailment_score'])], axis=1)
             aResult = aResult.reindex(columns=['sentence', 'TextEntailment', 'Entailment_score','Relevance_score'])
             aBox = pd.DataFrame({'triple': [row["triple"]], 'property_id' : row['property_id'], 'url': row['url'],'Results': [aResult]})
             all_result = pd.concat([all_result,aBox], axis=0)

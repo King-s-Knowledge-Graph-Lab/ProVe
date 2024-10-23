@@ -111,7 +111,7 @@ def CheckItemStatus(target_id):
         return [{'qid': target_id, 'status': 'Not processed yet'}]
     
     
-#1.2. calculate the reference healthy value for an item
+#1.2. calculate the reference score for an item
 #Examples = Q5820 : error/ Q5208 : good/ Q42220 : None.
 def comprehensive_results(target_id):
     response = GetItem(target_id)
@@ -119,31 +119,39 @@ def comprehensive_results(target_id):
         first_item = response[0]
         if isinstance(first_item, dict):
             if 'error' in first_item:
-                return {'Reference score': 'Not processed yet', 
+                return {'Reference_score': 'Not processed yet', 
                         'NOT ENOUGH INFO': 'Not processed yet',
                         'SUPPORTS': 'Not processed yet',
-                        'REFUTES': 'Not processed yet'
+                        'REFUTES': 'Not processed yet',
+                        'algo_version': first_item['algo_version'],
+                        'Requested_time': first_item['start_time']
                         }
             elif 'status' in first_item and first_item['status'] == 'error':
-                return {'Reference score': 'processing error', 
+                return {'Reference_score': 'processing error', 
                         'NOT ENOUGH INFO': 'processing error',
                         'SUPPORTS': 'processing error',
-                        'REFUTES': 'processing error'
+                        'REFUTES': 'processing error',
+                        'algo_version': first_item['algo_version'],
+                        'Requested_time': first_item['start_time']
                         }
             elif response[1].get('Result') == 'No available URLs':
-                return {'Reference score': 'No external URLs', 
+                return {'Reference_score': 'No external URLs', 
                         'NOT ENOUGH INFO': 'No external URLs',
                         'SUPPORTS': 'No external URLs',
-                        'REFUTES': 'No external URLs'
+                        'REFUTES': 'No external URLs',
+                        'algo_version': first_item['algo_version'],
+                        'Requested_time': first_item['start_time']
                         }
             else:
                 details =  pd.DataFrame(response[1:])
                 chekck_value_counts = details['result'].value_counts() 
                 health_value = (chekck_value_counts.get('SUPPORTS', 0) - chekck_value_counts.get('REFUTES', 0)) / chekck_value_counts.sum()
-                return {'Reference score': health_value, 
+                return {'Reference_score': health_value, 
                         'REFUTES': details[details['result']=='REFUTES'].to_dict(), 
                         'NOT ENOUGH INFO': details[details['result']=='NOT ENOUGH INFO'].to_dict(),
-                        'SUPPORTS': details[details['result']=='SUPPORTS'].to_dict()
+                        'SUPPORTS': details[details['result']=='SUPPORTS'].to_dict(),
+                        'algo_version': first_item['algo_version'],
+                        'Requested_time': first_item['start_time']
                         }
 
 
