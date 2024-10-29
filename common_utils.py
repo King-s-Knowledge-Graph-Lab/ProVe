@@ -1,6 +1,9 @@
 import pandas as pd
 import sqlite3
+import pandas as pd
+from datetime import datetime, timedelta
 from functions import *
+
 
 
 #Results extraction for pagePile list on the specific date
@@ -98,7 +101,65 @@ def pagePile_results_extraction(processed_date):
     else:
         print("Failed to retrieve data.")
         
+def analyze_pagepile_processing():
+    """
+    Analyzes the processing status of Pagepile QIDs from the status table.
+    Returns processing history and statistics for pagepile items.
+    """
+    # Get QID list from Pagepile
+    pagepile_df = pd.read_csv('CodeArchive/pagepile.csv', header=None, names=['qid', 'description'])
+    pagepile_qids = pagepile_df['qid'].tolist()
+    
+    # Query status data from DB
+    db_path = 'reference_checked.db'
+    conn = sqlite3.connect(db_path)
+    
+    query = """
+    SELECT s.task_id, s.qid, s.status, s.start_time, s.algo_version, s.request_type
+    FROM status s
+    WHERE s.qid IN ({})
+    ORDER BY s.start_time DESC
+    """.format(','.join('?' * len(pagepile_qids)))
+    
+    status_df = pd.read_sql_query(query, conn, params=pagepile_qids)
+    conn.close()
+    
+    if not status_df.empty:
+        # Convert start_time to datetime
+        status_df['start_time'] = pd.to_datetime(status_df['start_time'])
+        status_df['date'] = status_df['start_time'].dt.date
+        
+        # Daily processing counts
+        daily_counts = status_df.groupby(['date', 'status']).size().unstack(fill_value=0)
+        daily_counts = daily_counts.sort_index(ascending=False)  # Most recent dates first
+        
+        print("\n=== Pagepile Processing Analysis ===")
+        print("\nDaily Processing Status:")
+        print(daily_counts)
+        
+        # Status distribution
+        print("\nOverall Status Distribution:")
+        print(status_df['status'].value_counts())
+        
+        # Latest processing status for each QID
+        latest_status = status_df.sort_values('start_time').groupby('qid').last()
+        print("\nLatest Status for Each QID:")
+        print(latest_status[['status', 'start_time', 'algo_version']].head())
+        
+        return {
+            'daily_counts': daily_counts,
+            'status_distribution': status_df['status'].value_counts(),
+            'latest_status': latest_status,
+            'raw_data': status_df
+        }
+    else:
+        print("No processing records found for Pagepile QIDs")
+        return None
+
 if __name__ == "__main__":
     processed_date = "2024-09-06"
-    pagePile_results_extraction(processed_date)
+    #pagePile_results_extraction(processed_date)
+    
+    # Add Pagepile processing analysis
+    analysis = analyze_pagepile_processing()
     

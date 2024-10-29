@@ -412,8 +412,6 @@ def freq_selection_for_result(aggregated_result):
             result_sentence = temp[temp['TextEntailment']==result]['sentence'].iloc[0]
             li.append({'result': result, 'result_sentence': result_sentence})
     return pd.DataFrame(li)
-
-    
     
 def main(qids: List[str]):
     with ReferenceChecker() as checker:
