@@ -1,5 +1,8 @@
 import torch
 from transformers import pipeline, AutoTokenizer
+import logging
+
+logger = logging.getLogger(__name__)
 
 model_id = "meta-llama/Llama-3.2-3B-Instruct"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -35,8 +38,7 @@ def translate_text(text, chunk_size=1000):  # chunk_size in characters
         translated_chunk = outputs[0]["generated_text"][-1]['content']
         translated_parts.append(translated_chunk)
         
-        # Optional: Print progress
-        print(f"Processed chunk {i+1}/{len(text_chunks)}")
+        logger.info(f"Translation: Processed chunk {i+1}/{len(text_chunks)}")
 
     # Combine all translated parts
     return ' '.join(translated_parts)

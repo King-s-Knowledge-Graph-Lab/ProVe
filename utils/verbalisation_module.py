@@ -37,14 +37,16 @@ class VerbModule():
             
             self.g2t_module.model.eval()
             with torch.no_grad():
+                # Add decoder_start_token_id configuration
+                self.g2t_module.model.config.decoder_start_token_id = self.g2t_module.tokenizer.pad_token_id
+                
                 gen_output = self.g2t_module.model.generate(
-                    inputs_encoding['input_ids'],
+                    input_ids=inputs_encoding['input_ids'],
                     attention_mask=inputs_encoding['attention_mask'],
-                    use_cache=True,
-                    decoder_start_token_id = self.g2t_module.decoder_start_token_id,
-                    num_beams= self.g2t_module.eval_beams,
-                    max_length= self.g2t_module.eval_max_length,
-                    length_penalty=1.0    
+                    max_length=self.g2t_module.eval_max_length,
+                    num_beams=self.g2t_module.eval_beams,
+                    length_penalty=1.0,
+                    early_stopping=True,
                 )
         except Exception:
             print(inputs)

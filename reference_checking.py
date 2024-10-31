@@ -13,10 +13,19 @@ from utils.textual_entailment_module import TextualEntailmentModule
 from tqdm import tqdm
 from datetime import datetime
 import torch, gc
-from LLM_translation import translate_text  # Import the translation function
+from LLM_translation import translate_text  
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True  # 이미 설정된 로깅 설정을 덮어쓰기
+)
+
+logger = logging.getLogger(__name__)
 
 class ReferenceChecker:
     def __init__(self, config_path: str = 'config.yaml'):
+        self.logger = logging.getLogger(__name__)
         self.config = self.load_config(config_path)
         self.db_name = self.config['database']['name']
         self.conn = None
@@ -43,7 +52,7 @@ class ReferenceChecker:
             self.cursor.execute(query, params)
             return self.cursor.fetchall()
         except sqlite3.Error as e:
-            logging.error(f"Database error: {e}")
+            self.logger.error(f"Database error: {e}")
             return []
 
     def get_claim_df(self, entity_id: str) -> pd.DataFrame:
@@ -393,7 +402,7 @@ class ReferenceChecker:
             self.execute_query(upsert_query, tuple(values))
 
         self.conn.commit()
-        logging.info(f"Saved or updated {len(result)} rows in the checking_result table.")
+        self.logger.info(f"Saved or updated {len(result)} rows in the checking_result table.")
         return 
     
     def TableMaking(self, verbalised_claims_df_final, result):
@@ -442,9 +451,6 @@ def freq_selection_for_result(aggregated_result):
             result_sentence = temp[temp['TextEntailment']==result]['sentence'].iloc[0]
             li.append({'result': result, 'result_sentence': result_sentence})
     return pd.DataFrame(li)
-
-def English_translation(text):
-    pass
 
 def main(qids: List[str]):
     with ReferenceChecker() as checker:
