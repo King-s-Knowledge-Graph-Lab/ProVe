@@ -13,6 +13,7 @@ from utils.textual_entailment_module import TextualEntailmentModule
 from tqdm import tqdm
 from datetime import datetime
 import torch, gc
+from LLM_translation import translate_text  # Import the translation function
 
 class ReferenceChecker:
     def __init__(self, config_path: str = 'config.yaml'):
@@ -79,6 +80,16 @@ class ReferenceChecker:
     def sentenceSplitter(self, verbalised_claims_df_final, reference_text_df):
         join_df = pd.merge(verbalised_claims_df_final, reference_text_df[['reference_id', 'url', 'html']], on='reference_id', how='left')
         SS_df = join_df[['reference_id','url','verbalisation', 'html']].copy()
+
+        def get_language_from_html(html_content):
+            try:
+                soup = BeautifulSoup(html_content, 'html.parser')
+                lang = soup.html.get('lang')  # lang 속성 가져오기
+                return lang if lang else 'unknown'
+            except Exception as e:
+                print(f"Error getting language: {e}")
+                return 'unknown'
+
         def clean_html(html_content):
             if not html_content or html_content.startswith('Error:'):
                 return str(html_content)
@@ -128,11 +139,30 @@ class ReferenceChecker:
             except:
                 return ["No TEXT"]
         
+        SS_df['language'] = SS_df['html'].apply(get_language_from_html)
+
         SS_df['html2text'] = SS_df['html'].apply(clean_html)
+        
+        # Add translation for non-English texts
+        def translate_if_needed(text, lang):
+            if lang != 'en' and lang is not None and text:  # Check if translation is needed
+                try:
+                    return translate_text(text)
+                except Exception as e:
+                    print(f"Translation error: {e}")
+                    return text  # Return original text if translation fails
+            return text  # Return original text for English or None language
+        
+        # Apply translation and replace html2text content directly
+        SS_df['html2text'] = SS_df.apply(
+            lambda row: translate_if_needed(row['html2text'], row['language']), 
+            axis=1
+        )
+        
         SS_df['nlp_sentences'] = SS_df['html2text'].apply(split_into_sentences)
         SS_df['nlp_sentences_slide_2'] = SS_df['nlp_sentences'].apply(slide_sentences)
 
-        return SS_df[['reference_id','verbalisation','url','nlp_sentences','nlp_sentences_slide_2']]
+        return SS_df[['reference_id','verbalisation','url','language','nlp_sentences','nlp_sentences_slide_2']]
     
     def evidence_selection(self, splited_sentences_from_html: pd.DataFrame) -> pd.DataFrame:
         sr_module = SentenceRetrievalModule(max_len=self.config['evidence_selection']['token_size'])
@@ -412,7 +442,10 @@ def freq_selection_for_result(aggregated_result):
             result_sentence = temp[temp['TextEntailment']==result]['sentence'].iloc[0]
             li.append({'result': result, 'result_sentence': result_sentence})
     return pd.DataFrame(li)
-    
+
+def English_translation(text):
+    pass
+
 def main(qids: List[str]):
     with ReferenceChecker() as checker:
         original_results = pd.DataFrame()
@@ -443,6 +476,6 @@ def main(qids: List[str]):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    qids =['Q44']
+    qids =['Q8927']
     original_results, aggregated_results, reformedHTML_results = main(qids)
     
