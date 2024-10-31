@@ -292,6 +292,31 @@ def update_prior_item_list():
 
     print("prior_item_list.csv has been successfully updated.")
 
+def backup_database():
+    """
+    Backup the reference_checked.db file to the specified HPC directory
+    with date prefix in format YYYYMMDD_reference_checked.db
+    """
+    try:
+        # Source database path
+        source_db = 'reference_checked.db'
+        
+        # Create backup directory if it doesn't exist
+        backup_dir = '/hpc/scratch/prj/inf_wqp/prove_backup'
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        # Generate backup filename with date prefix
+        date_prefix = datetime.datetime.now().strftime('%Y%m%d')
+        backup_filename = f"{date_prefix}_reference_checked.db"
+        backup_path = os.path.join(backup_dir, backup_filename)
+        
+        # Copy the database file
+        import shutil
+        shutil.copy2(source_db, backup_path)
+        print(f"Database backup created successfully at {backup_path}")
+        
+    except Exception as e:
+        print(f"Error during database backup: {e}")
 
 def main(batch_qids):
     reset_database = False  # Developer mode to test, it initialize db for getting clean db
@@ -303,15 +328,19 @@ def main(batch_qids):
         print(f"Database file {db_path} has been deleted.")
     
     initialize_database(db_path)
+    
+    # Schedule both tasks for Monday
     schedule.every().monday.do(update_prior_item_list)
+    schedule.every().monday.do(backup_database)
+    
     while True:
         try:
             prove_process(db_path, batch_qids, algo_version)
             schedule.run_pending()
         except Exception as e:
             print(f"An error occurred in the main loop: {e}")
-            time.sleep(30)  
-        
+            time.sleep(30)
+    
 
 if __name__ == "__main__":
     batch_qids = 2

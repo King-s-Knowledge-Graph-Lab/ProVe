@@ -270,7 +270,7 @@ class HTMLFetcher:
 
     def reading_html_by_chrome(self, driver, url: str) -> None:
         try:
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=15)
 
             if response.status_code == 200:
                 driver.get(url)

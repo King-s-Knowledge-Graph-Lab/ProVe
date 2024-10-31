@@ -156,6 +156,10 @@ def analyze_pagepile_processing():
         print("No processing records found for Pagepile QIDs")
         return None
 
+#Data extraction for time complexity analysis
+def time_complexity_analysis():
+    pass
+
 if __name__ == "__main__":
     processed_date = "2024-09-06"
     #pagePile_results_extraction(processed_date)
