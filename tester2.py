@@ -1,80 +1,26 @@
-import requests
-import json
-from urllib.parse import quote
+import pandas as pd
+from LLM_translation import translate_text  
+import pdb
+import logging
 
-def query_wikimedia(target_id, languages=None):
-    if languages is None:
-        languages = ["en", "de", "fr", "es", "zh"]
-    
-    languages_str = '", "'.join(languages)
-    
-    sparql_query = f"""
-    SELECT ?label ?labelLang ?alias ?aliasLang ?description ?descLang
-    WHERE {{
-    OPTIONAL {{
-    {target_id} rdfs:label ?label.
-    FILTER(LANG(?label) IN ("{languages_str}"))
-    BIND(LANG(?label) AS ?labelLang)
-    }}
-    OPTIONAL {{
-    {target_id} skos:altLabel ?alias.
-    FILTER(LANG(?alias) IN ("{languages_str}"))
-    BIND(LANG(?alias) AS ?aliasLang)
-    }}
-    OPTIONAL {{
-    {target_id} schema:description ?description.
-    FILTER(LANG(?description) IN ("{languages_str}"))
-    BIND(LANG(?description) AS ?descLang)
-    }}
-    }}
-    ORDER BY
-    (IF(?labelLang = "en", 0, 1))
-    ?labelLang
-    (IF(?aliasLang = "en", 0, 1))
-    ?aliasLang
-    (IF(?descLang = "en", 0, 1))
-    ?descLang
-    LIMIT 30
-    """
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True  
+)
+logger = logging.getLogger(__name__)
 
-    url = 'https://query.wikidata.org/sparql'
-    params = {
-        'query': sparql_query,
-        'format': 'json'
-    }
+SS_df = pd.read_csv('SS_df.csv')
 
-    headers = {
-        'User-Agent': 'Python-SPARQL-Query/1.0 (https://example.com/; username@example.com)'
-    }
+urls_to_translate = SS_df[~SS_df['language'].str.contains('en|unknown', case=False, na=False)]['url'].unique()
 
+total_urls = len(urls_to_translate)
+for idx, url in enumerate(urls_to_translate, 1):
     try:
-        response = requests.get(url, params=params, headers=headers)
-        response.raise_for_status()  # Raises an HTTPError for bad responses
-        data = response.json()
-        
-        results = data.get('results', {}).get('bindings', [])
-        
-        if results:
-            first_result = results[0]
-            label = first_result.get('label', {}).get('value', 'No label')
-            alias = first_result.get('alias', {}).get('value', 'No alias')
-            description = first_result.get('description', {}).get('value', 'No description')
-        else:
-            label, alias, description = 'No label', 'No alias', 'No description'
-        
-        return {
-            'target_id': target_id,
-            'label': label,
-            'alias': alias,
-            'description': description,
-            'full_results': results
-        }
-    
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
-        return None
-
-# 사용 예시
-target_id = 'wd:Q816695'  # 인간을 나타내는 Wikidata ID
-result = query_wikimedia(target_id)
-print(json.dumps(result, indent=2, ensure_ascii=False))
+        text_to_translate = SS_df[SS_df['url'] == url]['html2text'].iloc[0]
+        translated_text = translate_text(text_to_translate)
+        SS_df.loc[SS_df['url'] == url, 'html2text'] = translated_text
+        logger.info(f"Successfully translated URL {idx}/{total_urls}")
+    except Exception as e:
+        logger.error(f"Error translating URL {idx}/{total_urls} ({url}): {str(e)}")
+pdb.set_trace()

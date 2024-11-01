@@ -846,5 +846,5 @@ def main(qids: List[str]):
 
             
 if __name__ == "__main__":
-    qids =['Q517']
+    qids =['Q2825427']
     main(qids)

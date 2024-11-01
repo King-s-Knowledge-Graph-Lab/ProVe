@@ -15,10 +15,12 @@ from datetime import datetime
 import torch, gc
 from LLM_translation import translate_text  
 
+import pdb
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    force=True  # 이미 설정된 로깅 설정을 덮어쓰기
+    force=True  
 )
 
 logger = logging.getLogger(__name__)
@@ -149,25 +151,21 @@ class ReferenceChecker:
                 return ["No TEXT"]
         
         SS_df['language'] = SS_df['html'].apply(get_language_from_html)
-
         SS_df['html2text'] = SS_df['html'].apply(clean_html)
-        
-        # Add translation for non-English texts
-        def translate_if_needed(text, lang):
-            if lang != 'en' and lang is not None and text:  # Check if translation is needed
-                try:
-                    return translate_text(text)
-                except Exception as e:
-                    print(f"Translation error: {e}")
-                    return text  # Return original text if translation fails
-            return text  # Return original text for English or None language
-        
-        # Apply translation and replace html2text content directly
-        SS_df['html2text'] = SS_df.apply(
-            lambda row: translate_if_needed(row['html2text'], row['language']), 
-            axis=1
-        )
-        
+
+        urls_to_translate = SS_df[~SS_df['language'].str.contains('en|unknown', case=False, na=False)]['url'].unique()
+
+        total_urls = len(urls_to_translate)
+        for idx, url in enumerate(urls_to_translate, 1):
+            try:
+                text_to_translate = SS_df[SS_df['url'] == url]['html2text'].iloc[0]
+                translated_text = translate_text(text_to_translate)
+                SS_df.loc[SS_df['url'] == url, 'html2text'] = translated_text
+                logger.info(f"Successfully translated URL {idx}/{total_urls}")
+            except Exception as e:
+                logger.error(f"Error translating URL {idx}/{total_urls} ({url}): {str(e)}")
+
+        SS_df.to_csv('SS_df.csv', index=False)
         SS_df['nlp_sentences'] = SS_df['html2text'].apply(split_into_sentences)
         SS_df['nlp_sentences_slide_2'] = SS_df['nlp_sentences'].apply(slide_sentences)
 
@@ -482,6 +480,6 @@ def main(qids: List[str]):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    qids =['Q8927']
+    qids =['Q2825427']
     original_results, aggregated_results, reformedHTML_results = main(qids)
     

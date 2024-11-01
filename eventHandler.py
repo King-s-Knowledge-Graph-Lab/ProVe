@@ -12,6 +12,8 @@ import uuid
 import yaml
 import schedule
 
+import pdb
+
 def save_to_sqlite(result_df, db_path, table_name):
     result_df = result_df.astype(str)
     conn = sqlite3.connect(db_path)
@@ -163,8 +165,9 @@ def get_popular_connected_qids(num_qids):
     def format_qid(qid):
         return 'Q' + str(qid).lstrip('Q')
     if os.path.exists(file_path):
-        df = pd.read_csv(file_path)
-        df['qid'] = df['qid'].apply(format_qid)  # Ensure correct QID format when reading
+        df = pd.read_csv(file_path, on_bad_lines='skip')  
+        if not df.empty:  
+            df['qid'] = df['qid'].apply(format_qid)  
     else:
         df = pd.read_csv(url)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -208,9 +211,6 @@ def prove_process(db_path, batch_qids, algo_version):
             for qid in qids:
                 task_id = update_status(conn, qid, "in queue", algo_version, 'random_running')
             """
-        qids = get_popular_connected_qids(batch_qids)  
-        for qid in qids:
-            task_id = update_status(conn, qid, "in queue", algo_version, 'from_pagepile')
         queued_tasks = get_queued_qids(conn)[:batch_qids] 
         queued_qids = [qid for _, qid, _ in queued_tasks]
         task_ids = [task_id for task_id, _, _ in queued_tasks]
@@ -323,16 +323,17 @@ def main(batch_qids):
     config = load_config('config.yaml')
     db_path = config['database']['result_db_for_API']
     algo_version = config['version']['algo_version']
+    """
     if reset_database and os.path.exists(db_path):
         os.remove(db_path)
         print(f"Database file {db_path} has been deleted.")
-    
+    """
     initialize_database(db_path)
     
     # Schedule both tasks for Monday
     schedule.every().monday.do(update_prior_item_list)
     schedule.every().monday.do(backup_database)
-    
+
     while True:
         try:
             prove_process(db_path, batch_qids, algo_version)
