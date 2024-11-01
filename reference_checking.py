@@ -13,7 +13,9 @@ from utils.textual_entailment_module import TextualEntailmentModule
 from tqdm import tqdm
 from datetime import datetime
 import torch, gc
+import html2text
 from LLM_translation import translate_text  
+
 
 import pdb
 
@@ -151,7 +153,10 @@ class ReferenceChecker:
                 return ["No TEXT"]
         
         SS_df['language'] = SS_df['html'].apply(get_language_from_html)
-        SS_df['html2text'] = SS_df['html'].apply(clean_html)
+        h = html2text.HTML2Text()
+        h.ignore_links = True
+        SS_df['html2text'] = SS_df['html'].apply(lambda x: h.handle(x))
+        #SS_df['html2text'] = SS_df['html'].apply(clean_html)
 
         urls_to_translate = SS_df[~SS_df['language'].str.contains('en|unknown', case=False, na=False)]['url'].unique()
 
