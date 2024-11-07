@@ -14,8 +14,6 @@ from tqdm import tqdm
 from datetime import datetime
 import torch, gc
 import html2text
-from LLM_translation import translate_text  
-
 
 import pdb
 
@@ -137,10 +135,7 @@ class ReferenceChecker:
         def split_into_sentences(text):
             if not text:
                 return ["No TEXT"]
-            try:
-                return nltk.sent_tokenize(text)
-            except:
-                return ["No TEXT"]
+            return nltk.sent_tokenize(text)
 
         def slide_sentences(sentences, window_size=2):
             if not sentences:
@@ -158,6 +153,7 @@ class ReferenceChecker:
         SS_df['html2text'] = SS_df['html'].apply(lambda x: h.handle(x))
         #SS_df['html2text'] = SS_df['html'].apply(clean_html)
 
+        """ LLM-based document trasnlator 
         urls_to_translate = SS_df[~SS_df['language'].str.contains('en|unknown', case=False, na=False)]['url'].unique()
 
         total_urls = len(urls_to_translate)
@@ -169,8 +165,7 @@ class ReferenceChecker:
                 logger.info(f"Successfully translated URL {idx}/{total_urls}")
             except Exception as e:
                 logger.error(f"Error translating URL {idx}/{total_urls} ({url}): {str(e)}")
-
-        SS_df.to_csv('SS_df.csv', index=False)
+        """
         SS_df['nlp_sentences'] = SS_df['html2text'].apply(split_into_sentences)
         SS_df['nlp_sentences_slide_2'] = SS_df['nlp_sentences'].apply(slide_sentences)
 
@@ -485,6 +480,6 @@ def main(qids: List[str]):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    qids =['Q2825427']
+    qids =['Q8927']
     original_results, aggregated_results, reformedHTML_results = main(qids)
     
