@@ -45,14 +45,15 @@ class HTMLSentenceProcessor:
         return valid_html_df[['reference_id', 'url', 'nlp_sentences', 'nlp_sentences_slide_2']]
 
 class EvidenceSelector:
-    def __init__(self):
+    def __init__(self, sentence_retrieval=None, verb_module=None):
         self.logger = logging.getLogger(__name__)
         self.endpoint_url = "https://query.wikidata.org/sparql"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (compatible; MyBot/1.0; mailto:your@email.com)'
         }
-        self.verb_module = VerbModule()
-        self.sentence_retrieval = SentenceRetrievalModule(max_len=512)
+        # Use provided models or create new ones
+        self.verb_module = verb_module or VerbModule()
+        self.sentence_retrieval = sentence_retrieval or SentenceRetrievalModule(max_len=512)
         self.top_k = 5
 
     def get_labels_from_sparql(self, property_ids: List[str], entity_ids: List[str]) -> Tuple[Dict[str, str], Dict[str, str]]:

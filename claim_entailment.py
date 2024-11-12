@@ -8,10 +8,11 @@ from tqdm import tqdm
 from datetime import datetime
 
 class ClaimEntailmentChecker:
-    def __init__(self, config_path: str = 'config.yaml'):
+    def __init__(self, config_path: str = 'config.yaml', text_entailment=None):
         self.logger = logging.getLogger(__name__)
         self.config = self.load_config(config_path)
-        self.te_module = TextualEntailmentModule()
+        # Use provided model or create new one
+        self.te_module = text_entailment or TextualEntailmentModule()
         
     @staticmethod
     def load_config(config_path: str) -> Dict:
@@ -168,45 +169,43 @@ class ClaimEntailmentChecker:
         
         return evidence_df
 
-def process_entailment(evidence_df: pd.DataFrame, html_df: pd.DataFrame, qid: str) -> pd.DataFrame:
-    """
-    Main function to process entailment checking
-    """
-    checker = ClaimEntailmentChecker()
-    
-    # Add URLs from html_df using reference_id
-    evidence_df = evidence_df.merge(
-        html_df[['reference_id', 'url']], 
-        on='reference_id', 
-        how='left'
-    )
-    
-    # Check entailment and keep original probabilities
-    entailment_results = checker.check_entailment(evidence_df)
-    probabilities = entailment_results['evidence_TE_prob'].copy()  # 원본 확률값 저장
-    
-    # Format results
-    aggregated_results = checker.format_results(entailment_results)
-    
-    # Get final verdict
-    final_verdict = checker.get_final_verdict(aggregated_results)
-    aggregated_results = pd.concat([aggregated_results, final_verdict], axis=1)
-    
-    # Keep only necessary columns and drop 'Results'
-    final_results = aggregated_results[['text_entailment_score', 'similarity_score',
-                                      'processed_timestamp', 'result',
-                                      'result_sentence', 'reference_id']]
-    
-    # Add label probabilities using the saved probabilities
-    final_results['label_probabilities'] = probabilities.apply(
-        lambda x: {
-            'SUPPORTS': float(x[0][0]),
-            'REFUTES': float(x[0][1]),
-            'NOT ENOUGH INFO': float(x[0][2])
-        }
-    )
-    
-    return final_results
+    def process_entailment(self, evidence_df: pd.DataFrame, html_df: pd.DataFrame, qid: str) -> pd.DataFrame:
+        """
+        Main function to process entailment checking
+        """
+        # Add URLs from html_df using reference_id
+        evidence_df = evidence_df.merge(
+            html_df[['reference_id', 'url']], 
+            on='reference_id', 
+            how='left'
+        )
+        
+        # Check entailment and keep original probabilities
+        entailment_results = self.check_entailment(evidence_df)
+        probabilities = entailment_results['evidence_TE_prob'].copy()
+        
+        # Format results
+        aggregated_results = self.format_results(entailment_results)
+        
+        # Get final verdict
+        final_verdict = self.get_final_verdict(aggregated_results)
+        aggregated_results = pd.concat([aggregated_results, final_verdict], axis=1)
+        
+        # Keep only necessary columns and drop 'Results'
+        final_results = aggregated_results[['text_entailment_score', 'similarity_score',
+                                          'processed_timestamp', 'result',
+                                          'result_sentence', 'reference_id']]
+        
+        # Add label probabilities using the saved probabilities
+        final_results['label_probabilities'] = probabilities.apply(
+            lambda x: {
+                'SUPPORTS': float(x[0][0]),
+                'REFUTES': float(x[0][1]),
+                'NOT ENOUGH INFO': float(x[0][2])
+            }
+        )
+        
+        return final_results
 
 if __name__ == "__main__":
     qid = 'Q44'
