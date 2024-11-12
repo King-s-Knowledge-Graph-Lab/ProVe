@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 import yaml
 import requests
 import time
@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import pandas as pd
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -76,13 +77,20 @@ class HTMLFetcher:
             logging.error(f"Selenium error for {url}: {e}")
             return f"Error: {str(e)}"
 
-    def fetch_all_html(self, url_df: pd.DataFrame) -> pd.DataFrame:
-        """Fetch HTML for all URLs in the DataFrame"""
+    def fetch_all_html(self, url_df: pd.DataFrame, parser_result: Dict) -> pd.DataFrame:
+        """
+        Fetch HTML for all URLs in the DataFrame and add metadata from parser_result
+        Args:
+            url_df: DataFrame containing URLs
+            parser_result: Dictionary containing claims and claims_refs information
+        """
+        # First, fetch HTML content as before
         result_df = url_df.copy()
         result_df['html'] = None
         result_df['status'] = None
         result_df['lang'] = None
 
+        # Fetch HTML content (existing code remains the same)
         for i, (idx, row) in enumerate(result_df.iterrows()):
             if i > 0 and i % self.batch_size == 0:
                 time.sleep(self.delay)
@@ -142,19 +150,103 @@ class HTMLFetcher:
                 result_df.at[idx, 'lang'] = None
                 logging.error(f"Failed to fetch HTML for {row['url']}: {e}")
 
+        # After fetching HTML, add metadata from parser_result
+        # First, merge claims with claims_refs
+        claims_with_refs = parser_result['claims'].merge(
+            parser_result['claims_refs'],
+            on='claim_id',
+            how='inner'
+        )
+
+        # Then merge with our result_df using reference_id
+        result_df = result_df.merge(
+            claims_with_refs[['claim_id', 'entity_id', 'entity_label', 
+                             'property_id', 'datavalue', 'reference_id']],
+            on='reference_id',
+            how='left'
+        )
+
+        # Extract object_id and object_label from datavalue
+        def extract_object_id(datavalue: str) -> str:
+            try:
+                value_dict = eval(datavalue)
+                if 'value' in value_dict and 'numeric-id' in value_dict['value']:
+                    return f"Q{value_dict['value']['numeric-id']}"
+            except:
+                return None
+            return None
+
+        result_df['object_id'] = result_df['datavalue'].apply(extract_object_id)
+        
+        # Get property labels using the same method as in EvidenceSelector
+        property_ids = result_df['property_id'].unique().tolist()
+        object_ids = [oid for oid in result_df['object_id'].unique() if oid is not None]
+        
+        # Get labels from Wikidata (you'll need to implement this part)
+        labels = self.get_labels_from_sparql(property_ids, object_ids)
+        
+        # Add labels
+        result_df['property_label'] = result_df['property_id'].map(labels)
+        result_df['object_label'] = result_df['object_id'].map(labels)
+        
+        # Drop datavalue column as it's no longer needed
+        result_df = result_df.drop('datavalue', axis=1)
+
         return result_df
+
+    def get_labels_from_sparql(self, property_ids: List[str], entity_ids: List[str]) -> Dict[str, str]:
+        """
+        Get labels for properties and entities using SPARQL
+        """
+        endpoint_url = "https://query.wikidata.org/sparql"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (compatible; MyBot/1.0; mailto:your@email.com)'
+        }
+        
+        # Prepare property and entity IDs for SPARQL query
+        property_values = ' '.join([f'wd:{pid}' for pid in property_ids])
+        entity_values = ' '.join([f'wd:{eid}' for eid in entity_ids])
+        
+        query = f"""
+        SELECT ?id ?label WHERE {{
+          VALUES ?id {{ {property_values} {entity_values} }}
+          ?id rdfs:label ?label .
+          FILTER(LANG(?label) = "en")
+        }}
+        """
+        
+        try:
+            r = requests.get(endpoint_url, 
+                            params={'format': 'json', 'query': query},
+                            headers=headers)
+            r.raise_for_status()
+            results = r.json()
+            
+            # Create dictionary for labels
+            labels = {}
+            for result in results['results']['bindings']:
+                entity_id = result['id']['value'].split('/')[-1]
+                label = result['label']['value']
+                labels[entity_id] = label
+                
+            return labels
+            
+        except Exception as e:
+            logging.error(f"Error fetching labels: {e}")
+            return {}
 
             
 if __name__ == "__main__":
     qid = 'Q44'
     
     # Get URLs from WikidataParser
+    from wikidata_parser import WikidataParser
     parser = WikidataParser()
     parser_result = parser.process_entity(qid)
     url_references_df = parser_result['urls']
     
-    # Fetch HTML content
+    # Fetch HTML content with metadata
     fetcher = HTMLFetcher(config_path='config.yaml')
-    result_df = fetcher.fetch_all_html(url_references_df)
+    result_df = fetcher.fetch_all_html(url_references_df, parser_result)
     
     print(f"Successfully processed {len(result_df)} URLs")

@@ -480,6 +480,6 @@ def main(qids: List[str]):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    qids =['Q8927']
+    qids =['Q44']
     original_results, aggregated_results, reformedHTML_results = main(qids)
     
