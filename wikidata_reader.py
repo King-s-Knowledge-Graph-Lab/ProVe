@@ -353,6 +353,7 @@ def main(qids: List[str], reset: bool = False):
             parser.reset_database()
         for qid in qids: #batch processing to find claim informaton from Wikdiata
             parser.claimParser(qid)
+            break
         for qid in qids: #batch processing to clean proerpty of database
             parser.propertyFiltering(qid)
         for qid in qids: #batch processing to formatting urls 
@@ -360,5 +361,5 @@ def main(qids: List[str], reset: bool = False):
 
 if __name__ == "__main__":
     nltk.download('punkt', quiet=True)
-    qids =['Q2825427']
+    qids =['Q44']
     main(qids)
