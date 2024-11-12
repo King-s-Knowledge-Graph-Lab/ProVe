@@ -2,10 +2,9 @@ from qwikidata.linked_data_interface import get_entity_dict_from_api
 import nltk
 import spacy
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union
 import sys, subprocess
 import yaml, json, ast
-from db_manager import DatabaseManager
 import pandas as pd
 import requests
 
@@ -37,10 +36,8 @@ class EntityProcessor:
             qid: Wikidata entity ID (e.g., 'Q44')
             
         Returns:
-            Dictionary containing three DataFrames:
-            - claims: All claim information
-            - claims_refs: Claim-reference relationships
-            - refs: All reference information
+            Dict[str, pd.DataFrame]: Dictionary containing DataFrames for 
+            'claims', 'claims_refs', 'refs'
         """
         entity = get_entity_dict_from_api(qid)
         if not entity:
@@ -58,8 +55,15 @@ class EntityProcessor:
                 mainsnak = claim['mainsnak']
                 value = str(mainsnak['datavalue']) if mainsnak['snaktype'] == 'value' else mainsnak['snaktype']
                 
+                entity_label = (
+                    entity.get('labels', {})
+                    .get('en', {})
+                    .get('value', f"No label ({entity['id']})")
+                )
+                
                 claims_data.append((
                     entity['id'],
+                    entity_label,
                     claim['id'],
                     claim['rank'],
                     mainsnak['property'],
@@ -86,7 +90,8 @@ class EntityProcessor:
         # Create and return DataFrames
         return {
             'claims': pd.DataFrame(claims_data, columns=[
-                'entity_id', 'claim_id', 'rank', 'property_id', 'datatype', 'datavalue'
+                'entity_id', 'entity_label', 'claim_id', 'rank',
+                'property_id', 'datatype', 'datavalue'
             ]),
             'claims_refs': pd.DataFrame(claims_refs_data, columns=[
                 'claim_id', 'reference_id'
@@ -166,17 +171,24 @@ class URLProcessor:
                     'format': 'json'
                 },
                 headers=self.headers,
-                timeout=40
+                timeout=20
             )
             response.raise_for_status()
             
             results = response.json()
-            if results['results']['bindings']:
-                return results['results']['bindings'][0]['formatter_url']['value']
-            return 'no_formatter_url'
+            if not results.get('results', {}).get('bindings'):
+                logging.warning(f"No formatter URL found for {property_id}")
+                return 'no_formatter_url'
+            return results['results']['bindings'][0]['formatter_url']['value']
             
+        except requests.Timeout:
+            logging.error(f"Timeout while fetching formatter URL for {property_id}")
+            return 'no_formatter_url'
+        except requests.RequestException as e:
+            logging.error(f"Request error for {property_id}: {e}")
+            return 'no_formatter_url'
         except Exception as e:
-            logging.error(f"Error fetching formatter URL for {property_id}: {e}")
+            logging.error(f"Unexpected error for {property_id}: {e}")
             return 'no_formatter_url'
 
     def process_urls(self, filtered_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -257,9 +269,15 @@ class URLProcessor:
         return reference_value['value']
 
     def _combine_and_filter_urls(self, url_df: pd.DataFrame, ext_id_df: pd.DataFrame) -> pd.DataFrame:
+        if url_df.empty and ext_id_df.empty:
+            return pd.DataFrame()
+
         columns_for_join = ['reference_id', 'reference_property_id', 'reference_index', 
                            'reference_datatype', 'url']
-        all_url_df = pd.concat([url_df[columns_for_join], ext_id_df[columns_for_join]])
+        all_url_df = pd.concat([
+            url_df[columns_for_join], 
+            ext_id_df[columns_for_join]
+        ], ignore_index=True)
         
         if all_url_df.empty:
             return all_url_df
@@ -286,13 +304,13 @@ class WikidataParser:
     def process_entity(self, qid: str) -> Dict[str, pd.DataFrame]:
         """Process a single entity with its QID."""
         try:
-            logging.info(f"Processing entity: {qid}")
+            logging.info(f"Starting to process entity: {qid}")
             
-            # Get entity data
             entity_data = self.entity_processor.process_entity(qid)
+            logging.info(f"Entity data fetched: {len(entity_data['claims'])} claims")
             
-            # Filter claims
             filtered_claims = self.property_filter.filter_properties(entity_data['claims'])
+            logging.info(f"Claims filtered: {len(filtered_claims)} remaining")
             
             # Create filtered data dictionary
             filtered_data = {
@@ -307,11 +325,11 @@ class WikidataParser:
             # Add URL data to results
             filtered_data['urls'] = url_data
             
-            logging.info(f"Completed processing entity: {qid}")
+            logging.info(f"Entity {qid} processing completed successfully")
             return filtered_data
             
         except Exception as e:
-            logging.error(f"Error processing entity {qid}: {str(e)}")
+            logging.error(f"Failed to process entity {qid}: {str(e)}", exc_info=True)
             raise
 
 def ensure_spacy_model():
