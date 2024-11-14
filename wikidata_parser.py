@@ -2,7 +2,7 @@ from qwikidata.linked_data_interface import get_entity_dict_from_api
 import nltk
 import spacy
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any
 import sys, subprocess
 import yaml, json, ast
 import pandas as pd
@@ -36,8 +36,10 @@ class EntityProcessor:
             qid: Wikidata entity ID (e.g., 'Q44')
             
         Returns:
-            Dict[str, pd.DataFrame]: Dictionary containing DataFrames for 
-            'claims', 'claims_refs', 'refs'
+            Dictionary containing three DataFrames:
+            - claims: All claim information
+            - claims_refs: Claim-reference relationships
+            - refs: All reference information
         """
         entity = get_entity_dict_from_api(qid)
         if not entity:
@@ -300,37 +302,53 @@ class WikidataParser:
         self.entity_processor = EntityProcessor()
         self.property_filter = PropertyFilter()
         self.url_processor = URLProcessor()
+        self.processing_stats = {}  # Dictionary to store processing statistics
 
     def process_entity(self, qid: str) -> Dict[str, pd.DataFrame]:
         """Process a single entity with its QID."""
         try:
+            # Track statistics without affecting the return structure
+            self.processing_stats = {
+                'entity_id': qid,
+                'parsing_start_timestamp': pd.Timestamp.now(),
+                'total_claims': 0,
+                'filtered_claims': 0,
+                'percentage_kept': 0.0,
+                'url_references': 0
+            }
+            
             logging.info(f"Starting to process entity: {qid}")
             
             entity_data = self.entity_processor.process_entity(qid)
-            logging.info(f"Entity data fetched: {len(entity_data['claims'])} claims")
+            total_claims = len(entity_data['claims'])
+            self.processing_stats['total_claims'] = total_claims
             
             filtered_claims = self.property_filter.filter_properties(entity_data['claims'])
-            logging.info(f"Claims filtered: {len(filtered_claims)} remaining")
+            filtered_claims_count = len(filtered_claims)
+            self.processing_stats['filtered_claims'] = filtered_claims_count
+            self.processing_stats['percentage_kept'] = (filtered_claims_count / total_claims * 100) if total_claims > 0 else 0
             
-            # Create filtered data dictionary
-            filtered_data = {
+            result = {
                 'claims': filtered_claims,
                 'claims_refs': entity_data['claims_refs'],
                 'refs': entity_data['refs']
             }
             
-            # Process URLs
-            url_data = self.url_processor.process_urls(filtered_data)
+            url_data = self.url_processor.process_urls(result)
+            self.processing_stats['url_references'] = len(url_data)
             
-            # Add URL data to results
-            filtered_data['urls'] = url_data
+            result['urls'] = url_data
             
-            logging.info(f"Entity {qid} processing completed successfully")
-            return filtered_data
+            return result  # Maintains original return structure
             
         except Exception as e:
             logging.error(f"Failed to process entity {qid}: {str(e)}", exc_info=True)
             raise
+
+    # Add new method to access statistics
+    def get_processing_stats(self) -> Dict:
+        """Return the processing statistics from the last entity processed"""
+        return self.processing_stats
 
 def ensure_spacy_model():
     try:
@@ -345,6 +363,7 @@ if __name__ == "__main__":
     nltk.download('punkt', quiet=True)
     qid = 'Q44'
     parser = WikidataParser()
-    result = parser.process_entity('Q44') #result.keys() = dict_keys(['claims', 'claims_refs', 'refs', 'urls'])
+    result = parser.process_entity('Q44')
+    stats = parser.get_processing_stats()#result.keys() = dict_keys(['claims', 'claims_refs', 'refs', 'urls'])
 
 

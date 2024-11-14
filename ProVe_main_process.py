@@ -27,7 +27,7 @@ def process_entity(qid: str, models: tuple) -> tuple:
     # Get URLs and claims
     parser = WikidataParser()
     parser_result = parser.process_entity(qid)
-    
+    parser_stats = parser.get_processing_stats()
     # Fetch HTML content
     fetcher = HTMLFetcher(config_path='config.yaml')
     html_df = fetcher.fetch_all_html(parser_result['urls'], parser_result)
@@ -42,7 +42,7 @@ def process_entity(qid: str, models: tuple) -> tuple:
     # Check entailment with metadata
     entailment_results = checker.process_entailment(evidence_df, html_df, qid)
     
-    return html_df, evidence_df, entailment_results
+    return html_df, entailment_results, parser_stats
 
 if __name__ == "__main__":
     # Initialize models once
@@ -50,5 +50,7 @@ if __name__ == "__main__":
     
     # Process entity
     qid = 'Q44'
-    html_df, evidence_df, entailment_results = process_entity(qid, models)
+    html_df, entailment_results, parser_stats = process_entity(qid, models)
+    
+    
     

@@ -9,7 +9,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 import requests
+from ProVe_main_service import MongoDBHandler
 
+mongo_handler = MongoDBHandler()
 
 #Params.
 def load_config(config_path: str):
@@ -48,8 +50,7 @@ def print_schemas(table_schemas):
 table_schemas = get_all_tables_and_schemas(db_path)
 
 
-print("\nSchema information for each table:")
-print_schemas(table_schemas)
+
 
 #Utils
 def get_filtered_data(db_path, table_name, column_name, filter_value):
@@ -87,14 +88,91 @@ def get_full_data(db_path, table_name):
 #1. items
 #1.1. check the aggregated results for an item (only recent one)
 def GetItem(target_id):
+    """Get item information from MongoDB first, then fallback to SQLite if not found"""
+    mongo_result = None
+    try:
+        mongo_handler.ensure_connection()
+        mongo_result = _get_from_mongodb(target_id)
+    except Exception as e:
+        print(f"MongoDB error: {e}, falling back to SQLite")
+    
+    if mongo_result:
+        return mongo_result
+    
+    try:
+        return get_item_from_sqlite(target_id)
+    except Exception as e:
+        print(f"SQLite error: {e}")
+        return [{'error': f'Error retrieving data: {str(e)}'}]
+
+def _get_from_mongodb(target_id):
+    """Helper function to get data from MongoDB with cursor-based pagination"""
+    mongo_status = mongo_handler.status_collection.find_one(
+        {'qid': target_id},
+        sort=[('requested_timestamp', -1)]
+    )
+    
+    if not mongo_status:
+        return None
+        
+    try:
+        # Use cursor for large collections
+        html_cursor = mongo_handler.html_collection.find(
+            {'task_id': mongo_status['task_id']},
+            {
+                'object_id': 1, 'property_id': 1, 'url': 1, 
+                'entity_label': 1, 'property_label': 1, 'object_label': 1,
+                'reference_id': 1, 'lang': 1, 'status': 1, '_id': 0
+            }
+        ).batch_size(100)  # Process in batches
+        
+        results = []
+        for doc in html_cursor:
+            result = _process_html_document(doc, mongo_status['task_id'])
+            if result:
+                results.append(result)
+                
+        result_item = results if results else [{'Result': 'No valid results found'}]
+        
+        # Safe timestamp handling
+        start_time = mongo_status.get('processing_start_timestamp')
+        if start_time:
+            if isinstance(start_time, str):
+                formatted_time = start_time
+            else:
+                formatted_time = start_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        else:
+            formatted_time = 'Unknown'
+            
+        formatted_status = {
+            'qid': mongo_status['qid'],
+            'task_id': mongo_status['task_id'],
+            'status': mongo_status['status'],
+            'algo_version': mongo_status.get('algo_version', 'Unknown'),
+            'request_type': mongo_status.get('request_type', 'Unknown'),
+            'start_time': formatted_time
+        }
+        
+        return [formatted_status] + result_item
+        
+    except Exception as e:
+        print(f"Error processing MongoDB data: {e}")
+        raise
+
+def get_item_from_sqlite(target_id):
+    """Existing SQLite search logic"""
     check_item = get_filtered_data(db_path, 'status', 'qid', f'{target_id}')
     if len(check_item) != 0:
-        check_item = max(check_item, key=lambda x: x['start_time'][:-5])#select recent one
+        check_item = max(check_item, key=lambda x: x['start_time'][:-5])  # Select the most recent one
         getResult_item = get_filtered_data(db_path, 'aggregated_results', 'task_id', check_item['task_id'])
 
-        if len(getResult_item) ==0:
-            getResult_item = [{'Result':'No available URLs'}]
+        if len(getResult_item) == 0:
+            getResult_item = [{'Result': 'No available URLs'}]
         else:
+            for item in getResult_item:
+                if 'result_sentence' in item and 'Error:' in item['result_sentence']:
+                    item['result'] = 'error'
+                    
             keys_to_remove = ['id', 'Results', 'task_id', 'reference_id']
             for item in getResult_item:
                 for key in keys_to_remove:
@@ -110,49 +188,63 @@ def CheckItemStatus(target_id):
     else:
         return [{'qid': target_id, 'status': 'Not processed yet'}]
     
-    
 #1.2. calculate the reference score for an item
 #Examples = Q5820 : error/ Q5208 : good/ Q42220 : None.
 def comprehensive_results(target_id):
+    """Get comprehensive results for a target ID including reference score and grouped results"""
     response = GetItem(target_id)
-    if isinstance(response, list) and len(response) > 0:
-        first_item = response[0]
-        if isinstance(first_item, dict):
-            if 'error' in first_item:
-                return {'Reference_score': 'Not processed yet', 
-                        'NOT ENOUGH INFO': 'Not processed yet',
-                        'SUPPORTS': 'Not processed yet',
-                        'REFUTES': 'Not processed yet',
-                        'algo_version': first_item['algo_version'],
-                        'Requested_time': first_item['start_time']
-                        }
-            elif 'status' in first_item and first_item['status'] == 'error':
-                return {'Reference_score': 'processing error', 
-                        'NOT ENOUGH INFO': 'processing error',
-                        'SUPPORTS': 'processing error',
-                        'REFUTES': 'processing error',
-                        'algo_version': first_item['algo_version'],
-                        'Requested_time': first_item['start_time']
-                        }
-            elif response[1].get('Result') == 'No available URLs':
-                return {'Reference_score': 'No external URLs', 
-                        'NOT ENOUGH INFO': 'No external URLs',
-                        'SUPPORTS': 'No external URLs',
-                        'REFUTES': 'No external URLs',
-                        'algo_version': first_item['algo_version'],
-                        'Requested_time': first_item['start_time']
-                        }
-            else:
-                details =  pd.DataFrame(response[1:])
-                chekck_value_counts = details['result'].value_counts() 
-                health_value = (chekck_value_counts.get('SUPPORTS', 0) - chekck_value_counts.get('REFUTES', 0)) / chekck_value_counts.sum()
-                return {'Reference_score': health_value, 
-                        'REFUTES': details[details['result']=='REFUTES'].to_dict(), 
-                        'NOT ENOUGH INFO': details[details['result']=='NOT ENOUGH INFO'].to_dict(),
-                        'SUPPORTS': details[details['result']=='SUPPORTS'].to_dict(),
-                        'algo_version': first_item['algo_version'],
-                        'Requested_time': first_item['start_time']
-                        }
+    
+    if not isinstance(response, list) or not response:
+        return None
+        
+    first_item = response[0]
+    task_id = first_item['task_id']
+    qid = first_item['qid']
+    
+    # Fetch total_claims from parser_stats collection
+    parser_stats = mongo_handler.stats_collection.find_one(
+        {'task_id': task_id, 'qid': qid},
+        {'total_claims': 1, '_id': 0}
+    )
+    
+    total_claims = parser_stats['total_claims'] if parser_stats else None
+    
+    # Initialize result structure
+    result = {
+        'Reference_score': None,
+        'REFUTES': None,
+        'NOT ENOUGH INFO': None,
+        'SUPPORTS': None,
+        'error': None,
+        'algo_version': first_item.get('algo_version', 'Not processed yet'),
+        'Requested_time': first_item.get('start_time', 'Not processed yet'),
+        'total_claims': total_claims  # Add total_claims to the result
+    }
+    
+    # Handle special cases
+    if 'error' in first_item or first_item.get('status') == 'error':
+        result.update({k: 'processing error' for k in result if k not in ['algo_version', 'Requested_time']})
+        return result
+        
+    if len(response) < 2 or response[1].get('Result') == 'No available URLs':
+        result.update({k: 'No external URLs' for k in result if k not in ['algo_version', 'Requested_time']})
+        return result
+    
+    # Process normal results
+    details = pd.DataFrame(response[1:])
+    
+    # Calculate counts for SUPPORTS and REFUTES
+    supports_count = details[details['result'] == 'SUPPORTS'].shape[0]
+    refutes_count = details[details['result'] == 'REFUTES'].shape[0]
+    
+    # Calculate reference score
+    result['Reference_score'] = (supports_count - refutes_count) / total_claims if total_claims else None
+    
+    # Group results by type
+    for result_type in ['REFUTES', 'NOT ENOUGH INFO', 'SUPPORTS', 'error']:
+        result[result_type] = details[details['result'] == result_type].to_dict()
+    
+    return result
 
 
 #2. status
@@ -199,23 +291,37 @@ def check_queue_status(conn, qid):
     count = cursor.fetchone()[0]
     return count > 0
 
-def requestItemProcessing(qid, username):
-    conn = None
+def requestItemProcessing(qid):
+    """Request processing for a specific QID"""
     try:
-        conn = sqlite3.connect(db_path, timeout=100)
-        if check_queue_status(conn, qid):
+        # Check if item is already in queue
+        existing_request = mongo_handler.status_collection.find_one({
+            'qid': qid,
+            'status': 'in queue'
+        })
+        
+        if existing_request:
             return f"QID {qid} is already in queue. Skipping..."
-        task_id = update_status(conn, qid, "in queue", algo_version,f'RequestedUserId: {username}')
-        queued_tasks = get_queued_qids(conn)
-        conn.commit() 
-        return f"Task {task_id} created for QID {qid}"
-    except sqlite3.Error as e:
-        if conn:
-            conn.rollback()  
+        
+        # Create new status document
+        status_dict = {
+            'qid': qid,
+            'task_id': str(uuid.uuid4()),
+            'status': 'pending',
+            'algo_version': algo_version,
+            'request_type': 'userRequested',
+            'requested_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            'processing_start_timestamp': None,
+            'completed_timestamp': None
+        }
+        
+        # Save to MongoDB
+        result = mongo_handler.save_status(status_dict)
+        
+        return f"Task {status_dict['task_id']} created for QID {qid}"
+        
+    except Exception as e:
         return f"An error occurred: {e}"
-    finally:
-        if conn:
-            conn.close()
 
 #5. Generation worklist
 def finding_latest_entries(full_df):
@@ -359,3 +465,8 @@ def get_config_as_json():
     """
     config = load_config('config.yaml')
     return json.dumps(config, indent=2)
+
+if __name__ == "__main__":
+    #requestItemProcessing('Q44')
+    GetItem('Q44')
+    pass

@@ -37,7 +37,7 @@ class HTMLFetcher:
         self.fetching_driver = self.config.get('html_fetching', {}).get('fetching_driver', 'requests')
         self.batch_size = self.config.get('html_fetching', {}).get('batch_size', 20)
         self.delay = self.config.get('html_fetching', {}).get('delay', 1.0)
-        self.timeout = self.config.get('html_fetching', {}).get('timeout', 5)
+        self.timeout = self.config.get('html_fetching', {}).get('timeout', 50)
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
@@ -80,22 +80,20 @@ class HTMLFetcher:
     def fetch_all_html(self, url_df: pd.DataFrame, parser_result: Dict) -> pd.DataFrame:
         """
         Fetch HTML for all URLs in the DataFrame and add metadata from parser_result
-        Args:
-            url_df: DataFrame containing URLs
-            parser_result: Dictionary containing claims and claims_refs information
         """
-        # First, fetch HTML content as before
         result_df = url_df.copy()
         result_df['html'] = None
         result_df['status'] = None
         result_df['lang'] = None
+        result_df['fetch_timestamp'] = None
 
-        # Fetch HTML content (existing code remains the same)
         for i, (idx, row) in enumerate(result_df.iterrows()):
             if i > 0 and i % self.batch_size == 0:
                 time.sleep(self.delay)
 
             try:
+                fetch_start_time = pd.Timestamp.now()
+                
                 if self.fetching_driver == 'selenium':
                     html = self.fetch_html_with_selenium(row['url'])
                     status = 200 if not html.startswith('Error:') else 500
@@ -114,6 +112,7 @@ class HTMLFetcher:
 
                 result_df.at[idx, 'status'] = status
                 result_df.at[idx, 'html'] = html
+                result_df.at[idx, 'fetch_timestamp'] = fetch_start_time
 
                 if status == 200:
                     try:
@@ -128,7 +127,7 @@ class HTMLFetcher:
                         logging.error(f"Error detecting language for {row['url']}: {e}")
                         result_df.at[idx, 'lang'] = None
 
-                logging.info(f"Successfully fetched HTML for {row['url']} (Status: {status})")
+                logging.info(f"Successfully fetched HTML for {row['url']} (Status: {status}, Time: {fetch_start_time})")
 
             except requests.exceptions.HTTPError as e:
                 status = e.response.status_code
@@ -137,18 +136,21 @@ class HTMLFetcher:
                 result_df.at[idx, 'html'] = f"Error: HTTP {status} - {error_msg} - {str(e)}"
                 result_df.at[idx, 'lang'] = None
                 logging.error(f"HTTP error for {row['url']}: {status} ({error_msg})")
+                result_df.at[idx, 'fetch_timestamp'] = pd.Timestamp.now()
 
             except requests.exceptions.Timeout as e:
                 result_df.at[idx, 'status'] = 408
                 result_df.at[idx, 'html'] = f"Error: HTTP 408 - Request Timeout - {str(e)}"
                 result_df.at[idx, 'lang'] = None
                 logging.error(f"Timeout error for {row['url']}: {e}")
+                result_df.at[idx, 'fetch_timestamp'] = pd.Timestamp.now()
 
             except Exception as e:
                 result_df.at[idx, 'status'] = 500
                 result_df.at[idx, 'html'] = f"Error: HTTP 500 - Internal Server Error - {str(e)}"
                 result_df.at[idx, 'lang'] = None
                 logging.error(f"Failed to fetch HTML for {row['url']}: {e}")
+                result_df.at[idx, 'fetch_timestamp'] = pd.Timestamp.now()
 
         # After fetching HTML, add metadata from parser_result
         # First, merge claims with claims_refs

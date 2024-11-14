@@ -33,10 +33,13 @@ class ClaimEntailmentChecker:
             'evidence_TE_labels': [],
             'claim_TE_prob_weighted_sum': [],
             'claim_TE_label_weighted_sum': [],
-            'claim_TE_label_malon': []
+            'claim_TE_label_malon': [],
+            'processed_timestamp': []
         }
 
         for _, row in tqdm(textual_entailment_df.iterrows(), total=textual_entailment_df.shape[0]):
+            start_time = datetime.now()
+            
             claim = row['claim']
             evidence = [{
                 'sentence': row['sentence'],
@@ -76,6 +79,7 @@ class ClaimEntailmentChecker:
             te_columns['claim_TE_prob_weighted_sum'].append(claim_TE_prob_weighted_sum.tolist())
             te_columns['claim_TE_label_weighted_sum'].append(claim_TE_label_weighted_sum)
             te_columns['claim_TE_label_malon'].append(claim_TE_label_malon)
+            te_columns['processed_timestamp'].append(datetime.now().isoformat())
 
         # Add results to DataFrame
         for col, values in te_columns.items():
@@ -109,7 +113,7 @@ class ClaimEntailmentChecker:
                 'url': [row.get('url', '')],
                 'text_entailment_score': [max(row['evidence_TE_prob'][0])],
                 'similarity_score': [row['similarity_score']],
-                'processed_timestamp': [row.get('processed_timestamp', datetime.now().isoformat())],
+                'processed_timestamp': [row.get('processed_timestamp')],
                 'Results': [aResult]
             })
             
@@ -232,7 +236,8 @@ if __name__ == "__main__":
     evidence_df = selector.process_evidence(sentences_df, parser_result)
     
     # Check entailment with metadata
-    entailment_results = process_entailment(evidence_df, html_df, qid)
+    checker = ClaimEntailmentChecker()  
+    entailment_results = checker.process_entailment(evidence_df, html_df, qid)
     
     
 
