@@ -198,11 +198,41 @@ def get_item_from_sqlite(target_id):
         return [{'error': 'Not processed yet'}]
 
 def CheckItemStatus(target_id):
-    check_item = get_filtered_data(db_path, 'status', 'qid', f'{target_id}')
-    if len(check_item) != 0:
-        return check_item[-1]
-    else:
-        return [{'qid': target_id, 'status': 'Not processed yet'}]
+    try:
+        # Check MongoDB status collection first
+        mongo_statuses = list(mongo_handler.status_collection.find({'qid': target_id}))
+        
+        if mongo_statuses:
+            # Get the latest timestamp for each status, handling None values
+            def get_latest_timestamp(status_doc):
+                timestamps = [
+                    status_doc.get('requested_timestamp'),
+                    status_doc.get('processing_start_timestamp'),
+                    status_doc.get('completed_timestamp')
+                ]
+                # Filter out None values and return the max timestamp
+                valid_timestamps = [ts for ts in timestamps if ts is not None]
+                return max(valid_timestamps) if valid_timestamps else datetime.min
+            
+            latest_status = max(mongo_statuses, key=get_latest_timestamp)
+            
+            return {
+                'qid': latest_status['qid'],
+                'status': latest_status['status'],
+                'task_id': latest_status.get('task_id'),
+                'algo_version': latest_status.get('algo_version')
+            }
+        
+        # If not found in MongoDB, check SQLite
+        check_item = get_filtered_data(db_path, 'status', 'qid', f'{target_id}')
+        if check_item:
+            return check_item[-1]
+        
+        return {'qid': target_id, 'status': 'Not processed yet'}
+        
+    except Exception as e:
+        print(f"Error in CheckItemStatus: {e}")
+        return {'qid': target_id, 'status': 'Error checking status'}
     
 #1.2. calculate the reference score for an item
 #Examples = Q5820 : error/ Q5208 : good/ Q42220 : None.
@@ -219,7 +249,7 @@ def comprehensive_results(target_id):
     
     # Fetch total_claims from parser_stats collection
     parser_stats = mongo_handler.stats_collection.find_one(
-        {'task_id': task_id, 'qid': qid},
+        {'task_id': task_id, 'entity_id': qid},
         {'total_claims': 1, '_id': 0}
     )
     
@@ -323,7 +353,7 @@ def requestItemProcessing(qid):
         status_dict = {
             'qid': qid,
             'task_id': str(uuid.uuid4()),
-            'status': 'pending',
+            'status': 'in queue',
             'algo_version': algo_version,
             'request_type': 'userRequested',
             'requested_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
@@ -483,6 +513,6 @@ def get_config_as_json():
     return json.dumps(config, indent=2)
 
 if __name__ == "__main__":
-    #requestItemProcessing('Q44')
+    requestItemProcessing('Q44')
     GetItem('Q44')
     pass
