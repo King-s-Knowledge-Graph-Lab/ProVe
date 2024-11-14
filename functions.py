@@ -88,76 +88,92 @@ def get_full_data(db_path, table_name):
 #1. items
 #1.1. check the aggregated results for an item (only recent one)
 def GetItem(target_id):
-    """Get item information from MongoDB first, then fallback to SQLite if not found"""
-    mongo_result = None
     try:
-        mongo_handler.ensure_connection()
-        mongo_result = _get_from_mongodb(target_id)
-    except Exception as e:
-        print(f"MongoDB error: {e}, falling back to SQLite")
-    
-    if mongo_result:
-        return mongo_result
-    
-    try:
-        return get_item_from_sqlite(target_id)
-    except Exception as e:
-        print(f"SQLite error: {e}")
-        return [{'error': f'Error retrieving data: {str(e)}'}]
-
-def _get_from_mongodb(target_id):
-    """Helper function to get data from MongoDB with cursor-based pagination"""
-    mongo_status = mongo_handler.status_collection.find_one(
-        {'qid': target_id},
-        sort=[('requested_timestamp', -1)]
-    )
-    
-    if not mongo_status:
-        return None
+        # Check status in MongoDB
+        mongo_status = mongo_handler.status_collection.find_one(
+            {'qid': target_id},
+            sort=[('requested_timestamp', -1)]
+        )
         
-    try:
-        # Use cursor for large collections
-        html_cursor = mongo_handler.html_collection.find(
-            {'task_id': mongo_status['task_id']},
-            {
-                'object_id': 1, 'property_id': 1, 'url': 1, 
-                'entity_label': 1, 'property_label': 1, 'object_label': 1,
-                'reference_id': 1, 'lang': 1, 'status': 1, '_id': 0
-            }
-        ).batch_size(100)  # Process in batches
-        
-        results = []
-        for doc in html_cursor:
-            result = _process_html_document(doc, mongo_status['task_id'])
-            if result:
-                results.append(result)
-                
-        result_item = results if results else [{'Result': 'No valid results found'}]
-        
-        # Safe timestamp handling
-        start_time = mongo_status.get('processing_start_timestamp')
-        if start_time:
-            if isinstance(start_time, str):
-                formatted_time = start_time
-            else:
-                formatted_time = start_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-        else:
-            formatted_time = 'Unknown'
+        if mongo_status:
+            task_id = mongo_status['task_id']
             
-        formatted_status = {
-            'qid': mongo_status['qid'],
-            'task_id': mongo_status['task_id'],
-            'status': mongo_status['status'],
-            'algo_version': mongo_status.get('algo_version', 'Unknown'),
-            'request_type': mongo_status.get('request_type', 'Unknown'),
-            'start_time': formatted_time
-        }
-        
-        return [formatted_status] + result_item
+            # 1. Get initial data structure from html_content collection
+            html_contents = list(mongo_handler.html_collection.find(
+                {'task_id': task_id},
+                {
+                    'object_id': 1, 'property_id': 1, 'url': 1, 
+                    'entity_label': 1, 'property_label': 1, 'object_label': 1,
+                    'reference_id': 1, 'lang': 1, 'status': 1, '_id': 0
+                }
+            ))
+            
+            # 2. Transform data structure with new keys and create triple
+            result_items = []
+            for content in html_contents:
+                item = {
+                    'qid': content['object_id'],
+                    'property_id': content['property_id'],
+                    'url': content['url'],
+                    'triple': f"{content['entity_label']} {content['property_label']} {content['object_label']}",
+                    'reference_id': content['reference_id'],
+                    'lang': content['lang'],
+                    'status': content['status']
+                }
+                
+                # 3. Handle non-200 status codes
+                if content['status'] != 200:
+                    item['result'] = 'error'
+                    item['result_sentence'] = f"Source language: {content['lang']} Error code: {content['status']}"
+                    result_items.append(item)
+                    continue
+                
+                # 4. Query entailment results for status 200
+                entailment_results = list(mongo_handler.entailment_collection.find({
+                    'task_id': task_id,
+                    'reference_id': content['reference_id']
+                }))
+                
+                if entailment_results:
+                    # Group by result type and get highest score
+                    supports = [r for r in entailment_results if r['result'] == 'SUPPORTS']
+                    nei = [r for r in entailment_results if r['result'] == 'NOT ENOUGH INFO']
+                    refutes = [r for r in entailment_results if r['result'] == 'REFUTES']
+                    
+                    selected_result = None
+                    if supports:
+                        selected_result = max(supports, key=lambda x: x['text_entailment_score'])
+                    elif nei:
+                        selected_result = max(nei, key=lambda x: x['text_entailment_score'])
+                    elif refutes:
+                        selected_result = max(refutes, key=lambda x: x['text_entailment_score'])
+                    
+                    if selected_result:
+                        item['result'] = selected_result['result']
+                        item['result_sentence'] = f"Source language: {content['lang']} {selected_result['result_sentence']}"
+                        item['entailment_score'] = selected_result['text_entailment_score']
+                
+                result_items.append(item)
+            
+            # Format status document
+            formatted_status = {
+                'qid': mongo_status['qid'],
+                'task_id': mongo_status['task_id'],
+                'status': mongo_status['status'],
+                'algo_version': mongo_status['algo_version'],
+                'start_time': mongo_status['requested_timestamp'].strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                if isinstance(mongo_status['requested_timestamp'], datetime) 
+                else mongo_status['requested_timestamp']
+            }
+            
+            return [formatted_status] + result_items
+            
+        # If not found in MongoDB, fallback to SQLite
+        return get_item_from_sqlite(target_id)
         
     except Exception as e:
-        print(f"Error processing MongoDB data: {e}")
-        raise
+        print(f"Error in GetItem: {e}")
+        return [{'error': f'Error retrieving data: {str(e)}'}]
 
 def get_item_from_sqlite(target_id):
     """Existing SQLite search logic"""

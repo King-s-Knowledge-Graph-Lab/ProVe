@@ -302,6 +302,16 @@ class ProVeService:
         self.task_lock = Lock()
         self.setup_signal_handlers()
         
+    def _load_config(self, config_path):
+        """Load configuration from yaml file"""
+        try:
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file)
+            return config
+        except Exception as e:
+            print(f"Error loading config file: {e}")
+            return {}  # Return empty config if loading fails
+            
     def setup_signal_handlers(self):
         signal.signal(signal.SIGINT, self.handle_shutdown)
         signal.signal(signal.SIGTERM, self.handle_shutdown)
@@ -372,7 +382,7 @@ class ProVeService:
                     self.main_loop(status_dict)
                 else:
                     print("No pending user requests found. Waiting...")
-                    time.sleep(10)
+                    time.sleep(3)
                     
             except Exception as e:
                 print(f"Main loop error: {e}")
