@@ -153,20 +153,42 @@ class HTMLFetcher:
                 result_df.at[idx, 'fetch_timestamp'] = pd.Timestamp.now()
 
         # After fetching HTML, add metadata from parser_result
-        # First, merge claims with claims_refs
         claims_with_refs = parser_result['claims'].merge(
             parser_result['claims_refs'],
             on='claim_id',
             how='inner'
         )
 
-        # Then merge with our result_df using reference_id
         result_df = result_df.merge(
             claims_with_refs[['claim_id', 'entity_id', 'entity_label', 
                              'property_id', 'datavalue', 'reference_id']],
             on='reference_id',
             how='left'
         )
+
+        # Fix "No label" entity labels
+        def extract_qid_from_no_label(label):
+            if isinstance(label, str) and label.startswith('No label (Q') and label.endswith(')'):
+                return label[label.find('(Q')+1:label.find(')')]
+            return None
+
+        # Find entities needing labels
+        missing_labels_mask = result_df['entity_label'].str.startswith('No label', na=False)
+        entities_needing_labels = result_df.loc[missing_labels_mask, 'entity_label'].apply(extract_qid_from_no_label)
+        entities_needing_labels = [qid for qid in entities_needing_labels if qid is not None]
+
+        if entities_needing_labels:
+            # Get missing labels from SPARQL
+            missing_labels = self.get_labels_from_sparql(entities_needing_labels, [])
+            
+            # Update entity labels
+            def update_label(row):
+                if isinstance(row['entity_label'], str) and row['entity_label'].startswith('No label'):
+                    qid = extract_qid_from_no_label(row['entity_label'])
+                    return missing_labels.get(qid, row['entity_label'])
+                return row['entity_label']
+            
+            result_df['entity_label'] = result_df.apply(update_label, axis=1)
 
         # Extract object_id and object_label from datavalue
         def extract_object_id(datavalue: str) -> str:
@@ -239,7 +261,7 @@ class HTMLFetcher:
 
             
 if __name__ == "__main__":
-    qid = 'Q44'
+    qid = 'Q42'
     
     # Get URLs from WikidataParser
     from wikidata_parser import WikidataParser

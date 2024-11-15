@@ -115,23 +115,25 @@ def GetItem(target_id):
                     'qid': content['object_id'],
                     'property_id': content['property_id'],
                     'url': content['url'],
-                    'triple': f"{content['entity_label']} {content['property_label']} {content['object_label']}",
-                    'reference_id': content['reference_id'],
-                    'lang': content['lang'],
-                    'status': content['status']
+                    'triple': f"{content['entity_label']} {content['property_label']} {content['object_label']}"
                 }
                 
+                # Store these temporarily for processing but don't include in final output
+                temp_status = content['status']
+                temp_lang = content['lang']
+                temp_ref_id = content['reference_id']
+                
                 # 3. Handle non-200 status codes
-                if content['status'] != 200:
+                if temp_status != 200:
                     item['result'] = 'error'
-                    item['result_sentence'] = f"Source language: {content['lang']} Error code: {content['status']}"
+                    item['result_sentence'] = f"Source language: ({temp_lang}) / Error code: {temp_status}"
                     result_items.append(item)
                     continue
                 
-                # 4. Query entailment results for status 200
+                # 4. Query entailment results using temporary variables
                 entailment_results = list(mongo_handler.entailment_collection.find({
                     'task_id': task_id,
-                    'reference_id': content['reference_id']
+                    'reference_id': temp_ref_id
                 }))
                 
                 if entailment_results:
@@ -150,8 +152,7 @@ def GetItem(target_id):
                     
                     if selected_result:
                         item['result'] = selected_result['result']
-                        item['result_sentence'] = f"Source language: {content['lang']} {selected_result['result_sentence']}"
-                        item['entailment_score'] = selected_result['text_entailment_score']
+                        item['result_sentence'] = f"Source language: ({temp_lang}) / {selected_result['result_sentence']}"
                 
                 result_items.append(item)
             
@@ -210,8 +211,16 @@ def CheckItemStatus(target_id):
                     status_doc.get('processing_start_timestamp'),
                     status_doc.get('completed_timestamp')
                 ]
-                # Filter out None values and return the max timestamp
-                valid_timestamps = [ts for ts in timestamps if ts is not None]
+                # Convert strings to datetime if necessary
+                valid_timestamps = []
+                for ts in timestamps:
+                    if isinstance(ts, str):
+                        try:
+                            ts = datetime.fromisoformat(ts)  # 문자열을 datetime으로 변환
+                        except ValueError:
+                            continue  # 변환할 수 없는 경우 무시
+                    if ts is not None:
+                        valid_timestamps.append(ts)
                 return max(valid_timestamps) if valid_timestamps else datetime.min
             
             latest_status = max(mongo_statuses, key=get_latest_timestamp)
@@ -513,6 +522,6 @@ def get_config_as_json():
     return json.dumps(config, indent=2)
 
 if __name__ == "__main__":
-    requestItemProcessing('Q44')
+    #requestItemProcessing('Q44')
     GetItem('Q44')
     pass

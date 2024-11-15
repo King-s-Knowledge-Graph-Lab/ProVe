@@ -46,8 +46,27 @@ class SentenceRetrievalModule():
         if ARGS['cuda']:
             self.model = self.model.cuda()
 
-    def score_sentence_pairs(self, inputs: List[Tuple[str]]):
-        inputs_processed = [(process_sent(input[0]), process_sent(input[1])) for input in inputs]
+    def score_sentence_pairs(self, inputs, batch_size=32):
+        """Score sentence pairs in batches to avoid memory issues"""
+        self.model.eval()
+        scores = []
+        
+        # Process in batches
+        for i in range(0, len(inputs), batch_size):
+            batch = inputs[i:i + batch_size]
+            
+            # Prepare batch tensors
+            inp, msk, seg = self.prepare_input(batch)
+            
+            with torch.no_grad():
+                batch_scores = self.model(inp, msk, seg).tolist()
+            scores.extend(batch_scores)
+        
+        assert len(scores) == len(inputs)
+        return scores
+
+    def prepare_input(self, batch):
+        inputs_processed = [(process_sent(input[0]), process_sent(input[1])) for input in batch]
 
         encodings =  self.tokenizer(
             inputs_processed,
@@ -68,10 +87,4 @@ class SentenceRetrievalModule():
             msk = msk.cuda()
             seg = seg.cuda()
 
-        self.model.eval()
-        with torch.no_grad():
-            outputs = self.model(inp, msk, seg).tolist()
-
-        assert len(outputs) == len(inputs)
-
-        return outputs
+        return inp, msk, seg
