@@ -167,28 +167,16 @@ class HTMLFetcher:
         )
 
         # Fix "No label" entity labels
-        def extract_qid_from_no_label(label):
-            if isinstance(label, str) and label.startswith('No label (Q') and label.endswith(')'):
-                return label[label.find('(Q')+1:label.find(')')]
-            return None
+        if result_df['entity_label'].iloc[0].startswith('No label'):
+            # Get the unique entity_id
+            entity_id = result_df['entity_id'].iloc[0]  # Retrieve the unique entity_id
 
-        # Find entities needing labels
-        missing_labels_mask = result_df['entity_label'].str.startswith('No label', na=False)
-        entities_needing_labels = result_df.loc[missing_labels_mask, 'entity_label'].apply(extract_qid_from_no_label)
-        entities_needing_labels = [qid for qid in entities_needing_labels if qid is not None]
-
-        if entities_needing_labels:
-            # Get missing labels from SPARQL
-            missing_labels = self.get_labels_from_sparql(entities_needing_labels, [])
+            # Fetch the label using SPARQL
+            missing_labels = self.get_labels_from_sparql([entity_id])
             
-            # Update entity labels
-            def update_label(row):
-                if isinstance(row['entity_label'], str) and row['entity_label'].startswith('No label'):
-                    qid = extract_qid_from_no_label(row['entity_label'])
-                    return missing_labels.get(qid, row['entity_label'])
-                return row['entity_label']
-            
-            result_df['entity_label'] = result_df.apply(update_label, axis=1)
+            # Update the label if it exists
+            if entity_id in missing_labels:
+                result_df['entity_label'] = missing_labels[entity_id]  # Update the label
 
         # Extract object_id and object_label from datavalue
         def extract_object_id(datavalue: str) -> str:
@@ -207,7 +195,7 @@ class HTMLFetcher:
         object_ids = [oid for oid in result_df['object_id'].unique() if oid is not None]
         
         # Get labels from Wikidata (you'll need to implement this part)
-        labels = self.get_labels_from_sparql(property_ids, object_ids)
+        labels = self.get_labels_from_sparql(object_ids)
         
         # Add labels
         result_df['property_label'] = result_df['property_id'].map(labels)
@@ -218,24 +206,21 @@ class HTMLFetcher:
 
         return result_df
 
-    def get_labels_from_sparql(self, property_ids: List[str], entity_ids: List[str]) -> Dict[str, str]:
+    def get_labels_from_sparql(self, entity_ids: List[str]) -> Dict[str, str]:
         """
-        Get labels for properties and entities using SPARQL
+        Get labels for entities using SPARQL
         """
         endpoint_url = "https://query.wikidata.org/sparql"
         headers = {
             'User-Agent': 'Mozilla/5.0 (compatible; MyBot/1.0; mailto:your@email.com)'
         }
         
-        # Prepare property and entity IDs for SPARQL query
-        property_values = ' '.join([f'wd:{pid}' for pid in property_ids])
-        entity_values = ' '.join([f'wd:{eid}' for eid in entity_ids])
-        
+        # Prepare the SPARQL query for a single entity
         query = f"""
         SELECT ?id ?label WHERE {{
-          VALUES ?id {{ {property_values} {entity_values} }}
-          ?id rdfs:label ?label .
-          FILTER(LANG(?label) = "en")
+          wd:{entity_ids[0]} rdfs:label ?label .
+          BIND(wd:{entity_ids[0]} AS ?id)
+          FILTER(LANG(?label) = "en" || LANG(?label) = "mul")
         }}
         """
         
@@ -249,10 +234,10 @@ class HTMLFetcher:
             # Create dictionary for labels
             labels = {}
             for result in results['results']['bindings']:
-                entity_id = result['id']['value'].split('/')[-1]
                 label = result['label']['value']
+                entity_id = result['id']['value'].split('/')[-1]
                 labels[entity_id] = label
-                
+            
             return labels
             
         except Exception as e:

@@ -296,6 +296,42 @@ class URLProcessor:
             
         return url_data
 
+    def get_labels_from_sparql(self, entity_ids: List[str]) -> Dict[str, str]:
+        """
+        Get labels for entities using SPARQL
+        """
+        endpoint_url = "https://query.wikidata.org/sparql"
+        
+        # Prepare the SPARQL query for a single entity
+        query = f"""
+        SELECT ?id ?label WHERE {{
+          wd:{entity_ids[0]} rdfs:label ?label .
+          BIND(wd:{entity_ids[0]} AS ?id)
+          FILTER(LANG(?label) = "en" || LANG(?label) = "mul")
+        }}
+        """
+        
+        try:
+            r = requests.get(endpoint_url, 
+                            params={'format': 'json', 'query': query},
+                            headers=self.headers,
+                            timeout=20)
+            r.raise_for_status()
+            results = r.json()
+            
+            # Create dictionary for labels
+            labels = {}
+            for result in results['results']['bindings']:
+                label = result['label']['value']
+                entity_id = result['id']['value'].split('/')[-1]
+                labels[entity_id] = label
+            
+            return labels
+            
+        except Exception as e:
+            logging.error(f"Error fetching labels: {e}")
+            return {}
+
 class WikidataParser:
     def __init__(self, config_path: str = 'config.yaml'):
         self.config = Config(config_path)
@@ -328,6 +364,18 @@ class WikidataParser:
             self.processing_stats['filtered_claims'] = filtered_claims_count
             self.processing_stats['percentage_kept'] = (filtered_claims_count / total_claims * 100) if total_claims > 0 else 0
             
+            # Fix "No label" entity labels
+            if not filtered_claims.empty and filtered_claims['entity_label'].iloc[0].startswith('No label'):
+                # Get the unique entity_id
+                entity_id = filtered_claims['entity_id'].iloc[0]
+                
+                # Fetch the label using SPARQL
+                missing_labels = self.url_processor.get_labels_from_sparql([entity_id])
+                
+                # Update the label if it exists
+                if entity_id in missing_labels:
+                    filtered_claims['entity_label'] = missing_labels[entity_id]
+            
             result = {
                 'claims': filtered_claims,
                 'claims_refs': entity_data['claims_refs'],
@@ -339,7 +387,7 @@ class WikidataParser:
             
             result['urls'] = url_data
             
-            return result  # Maintains original return structure
+            return result
             
         except Exception as e:
             logging.error(f"Failed to process entity {qid}: {str(e)}", exc_info=True)
@@ -361,9 +409,9 @@ def ensure_spacy_model():
 
 if __name__ == "__main__":
     nltk.download('punkt', quiet=True)
-    qid = 'Q44'
+
     parser = WikidataParser()
-    result = parser.process_entity('Q44')
+    result = parser.process_entity('Q42')
     stats = parser.get_processing_stats()#result.keys() = dict_keys(['claims', 'claims_refs', 'refs', 'urls'])
 
 

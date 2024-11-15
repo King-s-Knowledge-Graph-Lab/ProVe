@@ -126,7 +126,7 @@ def GetItem(target_id):
                 # 3. Handle non-200 status codes
                 if temp_status != 200:
                     item['result'] = 'error'
-                    item['result_sentence'] = f"Source language: ({temp_lang}) / Error code: {temp_status}"
+                    item['result_sentence'] = f"Source language: ({temp_lang}) / HTTP Error code: {temp_status}"
                     result_items.append(item)
                     continue
                 
