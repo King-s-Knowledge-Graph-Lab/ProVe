@@ -288,12 +288,17 @@ def comprehensive_results(target_id):
     # Process normal results
     details = pd.DataFrame(response[1:])
     
-    # Calculate counts for SUPPORTS and REFUTES
+    # Calculate counts for SUPPORTS, REFUTES, NOT ENOUGH INFO, and ERROR
     supports_count = details[details['result'] == 'SUPPORTS'].shape[0]
     refutes_count = details[details['result'] == 'REFUTES'].shape[0]
-    
+    not_enough_info_count = details[details['result'] == 'NOT ENOUGH INFO'].shape[0]
+    error_count = details[details['result'] == 'error'].shape[0]
+
+    # Calculate reference score using the sum of all relevant counts
+    total_counts = supports_count + refutes_count + not_enough_info_count + error_count
+
     # Calculate reference score
-    result['Reference_score'] = (supports_count - refutes_count) / total_claims if total_claims else None
+    result['Reference_score'] = (supports_count - refutes_count) / total_counts if total_counts else None
     
     # Group results by type
     for result_type in ['REFUTES', 'NOT ENOUGH INFO', 'SUPPORTS', 'error']:
