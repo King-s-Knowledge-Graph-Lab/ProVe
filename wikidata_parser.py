@@ -55,7 +55,16 @@ class EntityProcessor:
             for claim in claims:
                 # Extract claim data
                 mainsnak = claim['mainsnak']
-                value = str(mainsnak['datavalue']) if mainsnak['snaktype'] == 'value' else mainsnak['snaktype']
+                
+                # Extract object_id and datavalue
+                object_id = None
+                if mainsnak['snaktype'] == 'value':
+                    datavalue = mainsnak['datavalue']
+                    if datavalue['type'] == 'wikibase-entityid':
+                        object_id = f"Q{datavalue['value']['numeric-id']}"
+                    value = str(datavalue)
+                else:
+                    value = mainsnak['snaktype']
                 
                 entity_label = (
                     entity.get('labels', {})
@@ -70,7 +79,8 @@ class EntityProcessor:
                     claim['rank'],
                     mainsnak['property'],
                     mainsnak['datatype'],
-                    value
+                    value,
+                    object_id
                 ))
 
                 # Extract reference data
@@ -93,7 +103,7 @@ class EntityProcessor:
         return {
             'claims': pd.DataFrame(claims_data, columns=[
                 'entity_id', 'entity_label', 'claim_id', 'rank',
-                'property_id', 'datatype', 'datavalue'
+                'property_id', 'datatype', 'datavalue', 'object_id'
             ]),
             'claims_refs': pd.DataFrame(claims_refs_data, columns=[
                 'claim_id', 'reference_id'

@@ -166,63 +166,79 @@ class HTMLFetcher:
             how='left'
         )
 
-        # Fix "No label" entity labels
-        if result_df['entity_label'].iloc[0].startswith('No label'):
-            # Get the unique entity_id
-            entity_id = result_df['entity_id'].iloc[0]  # Retrieve the unique entity_id
-
-            # Fetch the label using SPARQL
-            missing_labels = self.get_labels_from_sparql([entity_id])
-            
-            # Update the label if it exists
-            if entity_id in missing_labels:
-                result_df['entity_label'] = missing_labels[entity_id]  # Update the label
-
         # Extract object_id and object_label from datavalue
         def extract_object_id(datavalue: str) -> str:
             try:
                 value_dict = eval(datavalue)
-                if 'value' in value_dict and 'numeric-id' in value_dict['value']:
-                    return f"Q{value_dict['value']['numeric-id']}"
-            except:
+                if 'type' in value_dict:
+                    if value_dict['type'] == 'wikibase-entityid':
+                        # Entity type handling
+                        if 'numeric-id' in value_dict['value']:
+                            return f"Q{value_dict['value']['numeric-id']}"
+                    elif value_dict['type'] == 'time':
+                        # Time type handling
+                        return value_dict['value']['time']
+            except Exception as e:
+                logging.error(f"Error extracting object_id: {e}")
                 return None
             return None
 
         result_df['object_id'] = result_df['datavalue'].apply(extract_object_id)
         
-        # Get property labels using the same method as in EvidenceSelector
+        # Extract unique Property IDs and Object IDs
         property_ids = result_df['property_id'].unique().tolist()
-        object_ids = [oid for oid in result_df['object_id'].unique() if oid is not None]
         
-        # Get labels from Wikidata (you'll need to implement this part)
-        labels = self.get_labels_from_sparql(object_ids)
+        # Separate time values and entity IDs
+        time_mask = result_df['object_id'].str.startswith('+', na=False) | result_df['object_id'].str.startswith('-', na=False)
+        entity_object_ids = [oid for oid in result_df[~time_mask]['object_id'].unique() if oid is not None]
         
-        # Add labels
-        result_df['property_label'] = result_df['property_id'].map(labels)
-        result_df['object_label'] = result_df['object_id'].map(labels)
+        # Get labels for properties and entity objects
+        property_labels = self.get_property_labels(property_ids)
+        entity_object_labels = self.get_entity_labels(entity_object_ids)
+        
+        # Add labels to the DataFrame
+        result_df['property_label'] = result_df['property_id'].map(property_labels)
+        
+        # For time values, use the time string as label
+        # For entity IDs, use the fetched labels
+        result_df.loc[time_mask, 'object_label'] = result_df.loc[time_mask, 'object_id']
+        result_df.loc[~time_mask, 'object_label'] = result_df.loc[~time_mask, 'object_id'].map(entity_object_labels)
         
         # Drop datavalue column as it's no longer needed
         result_df = result_df.drop('datavalue', axis=1)
 
         return result_df
 
-    def get_labels_from_sparql(self, entity_ids: List[str]) -> Dict[str, str]:
+    def get_property_labels(self, property_ids: List[str]) -> Dict[str, str]:
+        """Fetch labels for Wikidata properties"""
+        endpoint_url = "https://query.wikidata.org/sparql"
+        query = f"""
+        SELECT ?id ?label WHERE {{
+          VALUES ?id {{ wd:{' wd:'.join(property_ids)} }}
+          ?id rdfs:label ?label .
+          FILTER(LANG(?label) = "en" || LANG(?label) = "mul")
+        }}
         """
-        Get labels for entities using SPARQL
+        return self._execute_sparql_query(query)
+
+    def get_entity_labels(self, entity_ids: List[str]) -> Dict[str, str]:
+        """Fetch labels for Wikidata entities"""
+        endpoint_url = "https://query.wikidata.org/sparql"
+        query = f"""
+        SELECT ?id ?label WHERE {{
+          VALUES ?id {{ wd:{' wd:'.join(entity_ids)} }}
+          ?id rdfs:label ?label .
+          FILTER(LANG(?label) = "en" || LANG(?label) = "mul")
+        }}
         """
+        return self._execute_sparql_query(query)
+
+    def _execute_sparql_query(self, query: str) -> Dict[str, str]:
+        """Execute SPARQL query and return results as a dictionary"""
         endpoint_url = "https://query.wikidata.org/sparql"
         headers = {
             'User-Agent': 'Mozilla/5.0 (compatible; MyBot/1.0; mailto:your@email.com)'
         }
-        
-        # Prepare the SPARQL query for a single entity
-        query = f"""
-        SELECT ?id ?label WHERE {{
-          wd:{entity_ids[0]} rdfs:label ?label .
-          BIND(wd:{entity_ids[0]} AS ?id)
-          FILTER(LANG(?label) = "en" || LANG(?label) = "mul")
-        }}
-        """
         
         try:
             r = requests.get(endpoint_url, 
@@ -231,7 +247,6 @@ class HTMLFetcher:
             r.raise_for_status()
             results = r.json()
             
-            # Create dictionary for labels
             labels = {}
             for result in results['results']['bindings']:
                 label = result['label']['value']
