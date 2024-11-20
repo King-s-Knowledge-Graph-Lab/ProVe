@@ -5,6 +5,7 @@ from claim_entailment import ClaimEntailmentChecker
 from utils.textual_entailment_module import TextualEntailmentModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 from utils.verbalisation_module import VerbModule
+import pandas as pd
 
 def initialize_models():
     """Initialize all required models once"""
@@ -19,15 +20,23 @@ def process_entity(qid: str, models: tuple) -> tuple:
     """
     text_entailment, sentence_retrieval, verb_module = models
     
+    # Get URLs and claims
+    parser = WikidataParser()
+    parser_result = parser.process_entity(qid)
+    parser_stats = parser.get_processing_stats()
+    
+    # Check if URLs exist
+    if 'urls' not in parser_result or parser_result['urls'].empty:
+        # Return empty DataFrames and parser stats
+        empty_df = pd.DataFrame()
+        empty_results = pd.DataFrame()
+        return empty_df, empty_results, parser_stats
+    
     # Initialize processors with pre-loaded models
     selector = EvidenceSelector(sentence_retrieval=sentence_retrieval, 
                               verb_module=verb_module)
     checker = ClaimEntailmentChecker(text_entailment=text_entailment)
     
-    # Get URLs and claims
-    parser = WikidataParser()
-    parser_result = parser.process_entity(qid)
-    parser_stats = parser.get_processing_stats()
     # Fetch HTML content
     fetcher = HTMLFetcher(config_path='config.yaml')
     html_df = fetcher.fetch_all_html(parser_result['urls'], parser_result)
@@ -49,7 +58,7 @@ if __name__ == "__main__":
     models = initialize_models()
     
     # Process entity
-    qid = 'Q245247'
+    qid = 'Q122524066'
     html_df, entailment_results, parser_stats = process_entity(qid, models)
     
     

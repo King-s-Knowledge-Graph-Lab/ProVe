@@ -284,19 +284,34 @@ class URLProcessor:
         if url_df.empty and ext_id_df.empty:
             return pd.DataFrame()
 
-        columns_for_join = ['reference_id', 'reference_property_id', 'reference_index', 
-                           'reference_datatype', 'url']
-        all_url_df = pd.concat([
-            url_df[columns_for_join], 
-            ext_id_df[columns_for_join]
-        ], ignore_index=True)
+        # Process URL DataFrame
+        url_data = []
         
-        if all_url_df.empty:
-            return all_url_df
-
+        if not url_df.empty:
+            url_data.append(url_df[['reference_id', 'reference_property_id', 
+                                  'reference_index', 'reference_datatype', 'url']])
+        
+        # Process external ID DataFrame
+        if not ext_id_df.empty and 'formatter_url' in ext_id_df.columns:
+            valid_ext_ids = ext_id_df[ext_id_df['formatter_url'] != 'no_formatter_url'].copy()
+            if not valid_ext_ids.empty:
+                valid_ext_ids['url'] = valid_ext_ids.apply(
+                    lambda x: x['formatter_url'].replace('$1', x['ext_id']), 
+                    axis=1
+                )
+                url_data.append(valid_ext_ids[['reference_id', 'reference_property_id', 
+                                             'reference_index', 'reference_datatype', 'url']])
+        
+        # Combine all URL data
+        if not url_data:
+            return pd.DataFrame()
+        
+        all_url_df = pd.concat(url_data, ignore_index=True)
+        
+        # Apply filters and sorting
         all_url_df = all_url_df.sort_values(['reference_id', 'reference_index']).reset_index(drop=True)
-        all_url_df = all_url_df[~all_url_df['url'].isin(['placeholder', 'somevalue', 'novalue'])]
-
+        
+        # Get references with single URL
         reference_id_counts = all_url_df.reference_id.value_counts()
         single_url_references = reference_id_counts[reference_id_counts == 1].index
         url_data = all_url_df[all_url_df.reference_id.isin(single_url_references)]
@@ -421,7 +436,7 @@ if __name__ == "__main__":
     nltk.download('punkt', quiet=True)
 
     parser = WikidataParser()
-    result = parser.process_entity('Q42')
+    result = parser.process_entity('Q122524066')
     stats = parser.get_processing_stats()#result.keys() = dict_keys(['claims', 'claims_refs', 'refs', 'urls'])
 
 
