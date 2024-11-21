@@ -1,6 +1,5 @@
 from qwikidata.linked_data_interface import get_entity_dict_from_api
 import nltk
-import spacy
 import logging
 from typing import List, Dict, Any
 import sys, subprocess
@@ -422,13 +421,6 @@ class WikidataParser:
     def get_processing_stats(self) -> Dict:
         """Return the processing statistics from the last entity processed"""
         return self.processing_stats
-
-def ensure_spacy_model():
-    try:
-        spacy.load("en_core_web_sm")
-    except OSError:
-        logging.info("Downloading spaCy model...")
-        subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
 
 
 
