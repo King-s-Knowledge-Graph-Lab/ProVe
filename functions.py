@@ -8,7 +8,6 @@ import json
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
-import requests
 from ProVe_main_service import MongoDBHandler
 
 mongo_handler = MongoDBHandler()

@@ -1,6 +1,6 @@
 database:
   name: 'wikidata_claims_refs_parsed.db'
-  result_db_for_API: 'reference_checked.db'
+  result_db_for_API: '/home/ubuntu/mntdisk/reference_checked.db'
 
 version:
   algo_version: '1.1.0'

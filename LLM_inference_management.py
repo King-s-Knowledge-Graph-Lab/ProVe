@@ -2,14 +2,24 @@ from pymongo import MongoClient
 from datetime import datetime
 from typing import Optional, Dict, Any
 import uuid
+import torch
+from transformers import pipeline, AutoTokenizer
+
+# Initialize LLM model
+model_id = "meta-llama/Llama-3.2-3B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+pipe = pipeline(
+    "text-generation",
+    model=model_id,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
 
 class LLMInference:
     def __init__(self):
-        # MongoDB 연결
         self.client = MongoClient('mongodb://localhost:27017/')
         self.db = self.client['llm_inference']
-        
-        # 컬렉션 생성
+ 
         self.status_collection = self.db['llm_status']
         self.inference_collection = self.db['llm_inference']
 
@@ -116,8 +126,9 @@ class LLMInference:
                 'generated_text': None
             }
             
-            # Insert each document
+            # Insert document and generate text
             self.inference_collection.insert_one(inference_doc)
+            self.generate_and_update_text(llm_task_id)
             inference_docs.append(inference_doc)
         
         return inference_docs
@@ -173,6 +184,44 @@ class LLMInference:
         except Exception as e:
             print(f"Error resetting database: {e}")
     
+    def generate_and_update_text(self, llm_task_id: str) -> Optional[str]:
+        """
+        Generates text using LLM model and updates the inference document
+        """
+        # Find inference document by llm_task_id
+        inference_doc = self.inference_collection.find_one({'llm_task_id': llm_task_id})
+        
+        if not inference_doc:
+            return None
+            
+        # Create claim-based prompt
+        entity = inference_doc.get('entity_label', '')
+        property = inference_doc.get('property_label', '')
+        object_val = inference_doc.get('object_label', '')
+        html_content = inference_doc.get('source_data_from_html', '')
+        
+        prompt = f"Extract the most relevant information from the HTML document related to the following claim and create a single sentence. Claim: {entity} {property} {object_val}, HTML document: {html_content}"
+        
+        # Generate text using LLM model (similar to LLM_translation.py)
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant that extracts relevant information from HTML documents."},
+            {"role": "user", "content": prompt},
+        ]
+
+        outputs = pipe(
+            messages,
+            max_new_tokens=8192,
+        )
+        generated_text = outputs[0]["generated_text"][-1]['content']
+        
+        # Update the inference document with generated text
+        self.inference_collection.update_one(
+            {'_id': inference_doc['_id']},
+            {'$set': {'generated_text': generated_text}}
+        )
+        
+        return generated_text
+    
 if __name__ == "__main__":
     # Example usage
     llm = LLMInference()
@@ -182,13 +231,13 @@ if __name__ == "__main__":
 
     # Create status using qid
     status = llm.create_status_from_verification(
-        qid="Q44",
+        qid="Q42",
         llm_task_id="llm_task_" + str(uuid.uuid4()),
         infer_type="relevant_sentences_generation_from_HTML"
     )
 
     if status:
-        # Then create inference documents
+        # Then create inference documents and generate text
         inference_docs = llm.create_inference_from_verification(
             llm_task_id=status['llm_task_id'],
             prompt="Extract relevant sentences from the HTML content"
@@ -196,6 +245,10 @@ if __name__ == "__main__":
         
         if inference_docs:
             print(f"Created {len(inference_docs)} inference documents successfully")
+            # Check generated text
+            for doc in inference_docs:
+                result = llm.generate_and_update_text(doc['llm_task_id'])
+                print(f"Generated text: {result}")
         else:
             print("Failed to create inference documents")
     else:

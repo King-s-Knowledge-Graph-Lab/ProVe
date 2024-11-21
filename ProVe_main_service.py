@@ -1,9 +1,5 @@
-import wikidata_reader
-import html_fetching
-import reference_checking
+
 import pandas as pd
-import sqlite3
-import os
 from SPARQLWrapper import SPARQLWrapper, JSON
 import random
 import datetime
