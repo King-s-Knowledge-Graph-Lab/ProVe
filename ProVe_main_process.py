@@ -41,6 +41,12 @@ def process_entity(qid: str, models: tuple) -> tuple:
     fetcher = HTMLFetcher(config_path='config.yaml')
     html_df = fetcher.fetch_all_html(parser_result['urls'], parser_result)
     
+    # Check if there are any successful (status 200) URLs
+    if not (html_df['status'] == 200).any():
+        # Return current html_df with failed fetches, empty results and parser stats
+        empty_results = pd.DataFrame()
+        return html_df, empty_results, parser_stats
+    
     # Convert HTML to sentences
     processor = HTMLSentenceProcessor()
     sentences_df = processor.process_html_to_sentences(html_df)
@@ -58,7 +64,7 @@ if __name__ == "__main__":
     models = initialize_models()
     
     # Process entity
-    qid = 'Q44'
+    qid = 'Q8691'
     html_df, entailment_results, parser_stats = process_entity(qid, models)
     
     

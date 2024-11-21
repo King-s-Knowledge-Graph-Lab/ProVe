@@ -242,7 +242,7 @@ class EvidenceSelector:
         return evidence_df
 
 if __name__ == "__main__":
-    qid = 'Q44'
+    qid = 'Q107405554'
 
     # Get URLs and claims from WikidataParser
     from wikidata_parser import WikidataParser

@@ -1,4 +1,3 @@
-
 import pandas as pd
 from SPARQLWrapper import SPARQLWrapper, JSON
 import random
@@ -13,6 +12,14 @@ import ProVe_main_process
 from threading import Lock
 import signal
 import sys
+import nltk
+
+try:
+    nltk.download('punkt_tab')
+    
+except Exception as e:
+    print(f"Error in NLTK download: {e}")
+
 
 class MongoDBHandler:
     def __init__(self, connection_string="mongodb://localhost:27017/", max_retries=3):
@@ -224,7 +231,6 @@ class MongoDBHandler:
             # Find the oldest user request that hasn't been processed
             pending_request = self.status_collection.find_one(
                 {
-                    'request_type': 'userRequested',
                     'status': 'in queue'
                 },
                 sort=[('requested_timestamp', 1)]  # Get oldest request first

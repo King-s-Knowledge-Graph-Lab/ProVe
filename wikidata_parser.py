@@ -60,7 +60,11 @@ class EntityProcessor:
                 if mainsnak['snaktype'] == 'value':
                     datavalue = mainsnak['datavalue']
                     if datavalue['type'] == 'wikibase-entityid':
-                        object_id = f"Q{datavalue['value']['numeric-id']}"
+
+                        if 'numeric-id' in datavalue['value']:
+                            object_id = f"Q{datavalue['value']['numeric-id']}"
+                        else:
+                            object_id = str(datavalue['value'])
                     value = str(datavalue)
                 else:
                     value = mainsnak['snaktype']
