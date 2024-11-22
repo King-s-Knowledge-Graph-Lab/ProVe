@@ -86,6 +86,80 @@ def fetch_top_viewed_items(project="en.wikipedia", year="2024", month="11", day=
 def daily_top_viewed_items():
     pass
 
+def fetch_top_viewed_yesterday_with_qname(project="en.wikipedia", top_n=10):
+    """
+    Fetches top viewed items and processes them if they have valid QNames
+    """
+    try:
+        # ... 기존 API 호출 코드 ...
+        
+        if articles:
+            processed_count = 0
+            for article in articles:
+                title = article["article"].replace("_", " ")
+                views = article["views"]
+                
+                # Filter out special pages
+                if title.startswith("Special:") or title.startswith("Wikipedia:"):
+                    continue
+                
+                qname = fetch_wikidata_qname(title, project)
+                if qname != "No QName found" and qname != "Error fetching QName":
+                    # Process the item
+                    result = requestItemProcessing(qname, "top_viewed")
+                    processed_count += 1
+                    print(f"Processed {title} ({qname}) - {views} views: {result}")
+                
+                if processed_count >= top_n:
+                    break
+            
+            return f"Processed {processed_count} items with valid QNames"
+        else:
+            return "No data available for yesterday."
+    
+    except Exception as e:
+        return f"Error processing data: {e}"
+
+def process_top_viewed_items(project="en.wikipedia", top_n=10):
+    """
+    Fetches top viewed items and automatically processes them if they have valid QNames.
+    
+    Args:
+        project (str): Wikimedia project (e.g., 'en.wikipedia', 'ko.wikipedia')
+        top_n (int): Maximum number of items to process
+        
+    Returns:
+        str: Summary of processing results
+    """
+    try:
+        # Get the top viewed items first
+        top_items = fetch_top_viewed_yesterday_with_qname(project, top_n)
+        if isinstance(top_items, str) and "Error" in top_items:
+            return top_items
+            
+        # Process each line
+        processed_count = 0
+        for line in top_items.split('\n'):
+            # Parse the line (format: "1. Title - 123 views - Q12345")
+            parts = line.split(' - ')
+            if len(parts) != 3:
+                continue
+                
+            qname = parts[2].strip()
+            if qname != "No QName found" and qname != "Error fetching QName":
+                result = requestItemProcessing(qname, "top_viewed")
+                processed_count += 1
+                print(f"Processed {parts[0]} ({qname}): {result}")
+        
+        return f"Successfully processed {processed_count} items from top viewed list"
+        
+    except Exception as e:
+        return f"Error in processing top viewed items: {e}"
+
 if __name__ == "__main__":
-    qid = 'Q42'
-    pdb 
+    print("Fetching top viewed items:")
+    print(fetch_top_viewed_yesterday_with_qname(project="en.wikipedia", top_n=10))
+    
+    print("\nProcessing top viewed items:")
+    print(process_top_viewed_items(project="en.wikipedia", top_n=10))
+    
