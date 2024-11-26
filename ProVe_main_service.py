@@ -13,6 +13,7 @@ from threading import Lock
 import signal
 import sys
 import nltk
+from background_processing import process_top_viewed_items, process_pagepile_list, process_random_qid
 
 try:
     nltk.download('punkt_tab')
@@ -304,6 +305,10 @@ class ProVeService:
         self.task_lock = Lock()
         self.setup_signal_handlers()
         
+        # Schedule settings
+        schedule.every().day.at("02:00").do(self.run_top_viewed_items)  
+        schedule.every().saturday.at("03:00").do(self.run_pagepile_list)
+
     def _load_config(self, config_path):
         """Load configuration from yaml file"""
         try:
@@ -368,6 +373,35 @@ class ProVeService:
                 status_dict['error_message'] = str(e)
                 self.mongo_handler.save_status(status_dict)
         
+    def retry_processing(self):
+        """Retry processing for items stuck in processing state."""
+        retry_limit = 3  
+        current_time = datetime.utcnow()
+
+        # Find items that are in processing state
+        stuck_items = self.mongo_handler.status_collection.find({
+            'status': 'processing'
+        })
+
+        for item in stuck_items:
+            # Check the number of retries
+            if item.get('retry_count', 0) < retry_limit:
+                print(f"Retrying QID {item['qid']}...")
+                # Increment the retry count
+                self.mongo_handler.status_collection.update_one(
+                    {'_id': item['_id']},
+                    {'$set': {'retry_count': item.get('retry_count', 0) + 1}}
+                )
+                # Reprocess the item
+                self.main_loop(item) 
+            else:
+                print(f"QID {item['qid']} has reached the maximum retry limit. Updating status to error.")
+                # Update the status to error if retry limit is reached
+                self.mongo_handler.status_collection.update_one(
+                    {'_id': item['_id']},
+                    {'$set': {'status': 'error', 'error_message': 'Max retry limit reached'}}
+                )
+
     def run(self):
         """Main service loop with improved error handling"""
         if not self.initialize_resources():
@@ -385,12 +419,32 @@ class ProVeService:
                 else:
                     print("No pending user requests found. Waiting...")
                     time.sleep(3)
-                    
+
+                # Check for stuck processing items and retry
+                self.retry_processing()
+
+                schedule.run_pending()
+                time.sleep(1)  
+
             except Exception as e:
                 print(f"Main loop error: {e}")
                 time.sleep(30)
 
+    def run_top_viewed_items(self):
 
+        print("Running process_top_viewed_items...")
+        process_top_viewed_items(limit=100)
+
+    def run_pagepile_list(self):
+
+        print("Running process_pagepile_list...")
+        process_pagepile_list()
+
+    def check_and_run_random_qid(self):
+        if not self.mongo_handler.status_collection.find_one({'status': 'in queue'}):
+            print("No QIDs in queue, running process_random_qid...")
+            for _ in range(5): 
+                process_random_qid()
 
 if __name__ == "__main__":
 
