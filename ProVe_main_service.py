@@ -232,6 +232,7 @@ class MongoDBHandler:
             # Find the oldest user request that hasn't been processed
             pending_request = self.status_collection.find_one(
                 {
+                    'request_type': 'userRequested',
                     'status': 'in queue'
                 },
                 sort=[('requested_timestamp', 1)]  # Get oldest request first
@@ -255,7 +256,33 @@ class MongoDBHandler:
                 
                 return status_dict
             
-            return None
+            # If no userRequested found, get any request with status 'in queue'
+            fallback_request = self.status_collection.find_one(
+                {
+                    'status': 'in queue'
+                },
+                sort=[('requested_timestamp', 1)]  # Get oldest request first
+            )
+            
+            if fallback_request:
+                # Update status to processing and add processing start timestamp
+                status_dict = {
+                    'qid': fallback_request['qid'],
+                    'task_id': fallback_request['task_id'],
+                    'status': 'processing',
+                    'algo_version': fallback_request.get('algo_version', '1.0'),
+                    'request_type': fallback_request['request_type'],
+                    'requested_timestamp': fallback_request['requested_timestamp'],
+                    'processing_start_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                    'completed_timestamp': 'null'
+                }
+                
+                # Update the document in MongoDB
+                self.save_status(status_dict)
+                
+                return status_dict
+            
+            return None  # No requests found
             
         except Exception as e:
             print(f"Error getting next user request: {e}")
