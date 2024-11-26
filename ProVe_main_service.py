@@ -417,8 +417,8 @@ class ProVeService:
                     print(f"Processing request for QID: {status_dict['qid']}")
                     self.main_loop(status_dict)
                 else:
-                    print("No pending user requests found. Waiting...")
-                    time.sleep(3)
+                    self.check_and_run_random_qid()
+                    time.sleep(1)
 
                 # Check for stuck processing items and retry
                 self.retry_processing()
@@ -433,7 +433,7 @@ class ProVeService:
     def run_top_viewed_items(self):
 
         print("Running process_top_viewed_items...")
-        process_top_viewed_items(limit=100)
+        process_top_viewed_items(limit=300)
 
     def run_pagepile_list(self):
 
