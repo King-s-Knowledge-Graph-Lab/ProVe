@@ -287,7 +287,7 @@ def requestItemProcessing(qid: str, request_type: str) -> str:
             'status': 'in queue',
             'algo_version': algo_version,
             'request_type': request_type,
-            'requested_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            'requested_timestamp': datetime.utcnow(),
             'processing_start_timestamp': None,
             'completed_timestamp': None
         }
