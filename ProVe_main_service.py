@@ -14,6 +14,8 @@ import signal
 import sys
 import nltk
 from background_processing import process_top_viewed_items, process_pagepile_list, process_random_qid
+import logging
+from logging.handlers import RotatingFileHandler
 
 try:
     nltk.download('punkt_tab')
@@ -359,11 +361,20 @@ class ProVeService:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                self.models = ProVe_main_process.initialize_models()
+
+                print("Attempting to initialize resources...")
+                
+
                 self.mongo_handler = MongoDBHandler()
+                print("MongoDB connection successful")
+                
+
+                self.models = ProVe_main_process.initialize_models()
+                print("Models initialized successfully")
+                
                 return True
             except Exception as e:
-                print(f"Initialization attempt {attempt + 1} failed: {e}")
+                print(f"Initialization attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
                     return False
                 time.sleep(5)
@@ -431,31 +442,36 @@ class ProVeService:
 
     def run(self):
         """Main service loop with improved error handling"""
-        if not self.initialize_resources():
-            print("Failed to initialize resources. Exiting...")
-            return
+        try:
+            if not self.initialize_resources():
+                print("Failed to initialize resources. Exiting...")
+                sys.exit(1)
+            
+            print("Service started successfully")
+            
+            while self.running:
+                try:
+                    self.mongo_handler.ensure_connection()
+                    status_dict = self.mongo_handler.get_next_user_request()
+                    
+                    if status_dict:
+                        print(f"Processing request for QID: {status_dict['qid']}")
+                        self.main_loop(status_dict)
+                    else:
+                        self.check_and_run_random_qid()
+                        time.sleep(1)
 
-        while self.running:
-            try:
-                self.mongo_handler.ensure_connection()
-                status_dict = self.mongo_handler.get_next_user_request()
-                
-                if status_dict:
-                    print(f"Processing request for QID: {status_dict['qid']}")
-                    self.main_loop(status_dict)
-                else:
-                    self.check_and_run_random_qid()
+                    self.retry_processing()
+                    schedule.run_pending()
                     time.sleep(1)
 
-                # Check for stuck processing items and retry
-                self.retry_processing()
-
-                schedule.run_pending()
-                time.sleep(1)  
-
-            except Exception as e:
-                print(f"Main loop error: {e}")
-                time.sleep(30)
+                except Exception as e:
+                    print(f"Main loop error: {str(e)}")
+                    time.sleep(30)
+                
+        except Exception as e:
+            print(f"Fatal error in service: {str(e)}")
+            sys.exit(1)
 
     def run_top_viewed_items(self):
 

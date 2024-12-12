@@ -439,6 +439,6 @@ def process_random_qid():
 if __name__ == "__main__":
     # Uncomment the desired function to run
     # process_top_viewed_items(limit=300)  # Process top viewed items
-    # process_pagepile_list()  # Process QIDs from pagepile list
-    process_random_qid()  # Process a random QID
+    process_pagepile_list()  # Process QIDs from pagepile list
+    #process_random_qid()  # Process a random QID
     

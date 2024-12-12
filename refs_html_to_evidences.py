@@ -8,6 +8,7 @@ from utils.verbalisation_module import VerbModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 import numpy as np
 
+
 class HTMLSentenceProcessor:
     def __init__(self):
         nltk.download('punkt', quiet=True)
@@ -22,18 +23,18 @@ class HTMLSentenceProcessor:
         
         def split_into_sentences(text):
             if not text:
-                return ["No TEXT"]
+                return ["No content available"]
             return nltk.sent_tokenize(text)
 
         def slide_sentences(sentences, window_size=2):
             if not sentences:
-                return ["No TEXT"]
+                return ["No content available"]
             try:
                 if len(sentences) < window_size:
                     return [" ".join(sentences)]
                 return [" ".join(sentences[i:i + window_size]) for i in range(len(sentences) - window_size + 1)]
             except:
-                return ["No TEXT"]
+                return ["Error processing content"]
         
         # Convert HTML to text using html2text
         valid_html_df['html2text'] = valid_html_df['html'].apply(lambda x: self.h.handle(x))
@@ -242,7 +243,7 @@ class EvidenceSelector:
         return evidence_df
 
 if __name__ == "__main__":
-    qid = 'Q107405554'
+    qid = 'Q3136081'
 
     # Get URLs and claims from WikidataParser
     from wikidata_parser import WikidataParser

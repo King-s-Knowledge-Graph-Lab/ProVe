@@ -64,7 +64,7 @@ if __name__ == "__main__":
     models = initialize_models()
     
     # Process entity
-    qid = 'Q8691'
+    qid = 'Q3136081'
     html_df, entailment_results, parser_stats = process_entity(qid, models)
     
     

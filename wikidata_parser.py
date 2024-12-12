@@ -432,7 +432,7 @@ if __name__ == "__main__":
     nltk.download('punkt', quiet=True)
 
     parser = WikidataParser()
-    result = parser.process_entity('Q122524066')
+    result = parser.process_entity('Q51896665')
     stats = parser.get_processing_stats()#result.keys() = dict_keys(['claims', 'claims_refs', 'refs', 'urls'])
 
 

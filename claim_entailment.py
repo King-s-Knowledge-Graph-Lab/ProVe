@@ -177,7 +177,18 @@ class ClaimEntailmentChecker:
         """
         Main function to process entailment checking
         """
-        # Add URLs from html_df using reference_id
+        # Return empty DataFrame if evidence_df is empty
+        if evidence_df.empty:
+            return pd.DataFrame()
+        
+        # Add reference_id if not exists in evidence_df
+        if 'reference_id' not in evidence_df.columns:
+            evidence_df['reference_id'] = evidence_df.index
+        
+        # Add reference_id if not exists in html_df
+        if 'reference_id' not in html_df.columns:
+            html_df['reference_id'] = html_df.index
+        
         evidence_df = evidence_df.merge(
             html_df[['reference_id', 'url']], 
             on='reference_id', 
@@ -212,7 +223,7 @@ class ClaimEntailmentChecker:
         return final_results
 
 if __name__ == "__main__":
-    qid = 'Q44'
+    qid = 'Q3136081'
     
     from wikidata_parser import WikidataParser
     from refs_html_collection import HTMLFetcher
