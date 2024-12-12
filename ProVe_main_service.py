@@ -63,8 +63,11 @@ class MongoDBHandler:
                 print("Warning: html_df is empty")
                 return
                 
-            print(f"Attempting to save {len(html_df)} HTML records")
-            records = html_df.to_dict('records')
+            # Remvoing html data for storage efficiency 
+            html_df_without_html = html_df.drop('html', axis=1)
+            
+            print(f"Attempting to save {len(html_df_without_html)} HTML records")
+            records = html_df_without_html.to_dict('records')
             
             for record in records:
                 try:
