@@ -9,8 +9,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 from ProVe_main_service import MongoDBHandler
+from LLM_ProVe_main_service import MongoDBHandler as LLM_MongoDBHandler
 
 mongo_handler = MongoDBHandler()
+LLM_mongo_handler = LLM_MongoDBHandler()
 
 #Params.
 def load_config(config_path: str):
@@ -524,6 +526,144 @@ def get_config_as_json():
     """
     config = load_config('config.yaml')
     return json.dumps(config, indent=2)
+
+def CheckItemStatus_LLM(target_id):
+    try:
+        # Check MongoDB status collection first
+        mongo_statuses = list(LLM_mongo_handler.status_collection.find({'qid': target_id}))
+        
+        if mongo_statuses:
+            # Get the latest timestamp for each status, handling None values
+            def get_latest_timestamp(status_doc):
+                timestamps = [
+                    status_doc.get('requested_timestamp'),
+                    status_doc.get('processing_start_timestamp'),
+                    status_doc.get('completed_timestamp')
+                ]
+                # Convert strings to datetime if necessary
+                valid_timestamps = []
+                for ts in timestamps:
+                    if isinstance(ts, str):
+                        try:
+                            ts = datetime.fromisoformat(ts)
+                        except ValueError:
+                            continue
+                    if ts is not None:
+                        valid_timestamps.append(ts)
+                return max(valid_timestamps) if valid_timestamps else datetime.min
+            
+            latest_status = max(mongo_statuses, key=get_latest_timestamp)
+            
+            return {
+                'qid': latest_status['qid'],
+                'status': latest_status['status'],
+                'task_id': latest_status.get('task_id'),
+                'algo_version': latest_status.get('algo_version')
+            }
+        
+        # If not found in MongoDB, check SQLite
+        check_item = get_filtered_data(db_path, 'status', 'qid', f'{target_id}')
+        if check_item:
+            return check_item[-1]
+        
+        return {'qid': target_id, 'status': 'Not processed yet'}
+        
+    except Exception as e:
+        print(f"Error in CheckItemStatus_LLM: {e}")
+        return {'qid': target_id, 'status': 'Error checking status'}
+
+def requestItemProcessing_LLM(qid):
+    """Request processing for a specific QID using LLM inference database"""
+    try:
+        # Check if item is already in queue
+        existing_request = LLM_mongo_handler.status_collection.find_one({
+            'qid': qid,
+            'status': 'in queue'
+        })
+        
+        if existing_request:
+            return f"QID {qid} is already in queue. Skipping..."
+        
+        # Create new status document
+        status_dict = {
+            'qid': qid,
+            'task_id': str(uuid.uuid4()),
+            'status': 'in queue',
+            'algo_version': algo_version,
+            'request_type': 'userRequested',
+            'requested_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            'processing_start_timestamp': None,
+            'completed_timestamp': None
+        }
+        
+        # Save to MongoDB
+        result = LLM_mongo_handler.save_status(status_dict)
+        
+        return f"Task {status_dict['task_id']} created for QID {qid}"
+        
+    except Exception as e:
+        return f"An error occurred: {e}"
+
+def comprehensive_results_LLM(target_id):
+    """Get comprehensive results for a target ID including reference score and grouped results from LLM inference database"""
+    response = GetItem(target_id)
+    
+    if not isinstance(response, list) or not response:
+        return None
+        
+    first_item = response[0]
+    task_id = first_item['task_id']
+    qid = first_item['qid']
+    
+    # Fetch total_claims from parser_stats collection
+    parser_stats = LLM_mongo_handler.stats_collection.find_one(
+        {'task_id': task_id, 'entity_id': qid},
+        {'total_claims': 1, '_id': 0}
+    )
+    
+    total_claims = parser_stats['total_claims'] if parser_stats else None
+    
+    # Initialize result structure
+    result = {
+        'Reference_score': None,
+        'REFUTES': None,
+        'NOT ENOUGH INFO': None,
+        'SUPPORTS': None,
+        'error': None,
+        'algo_version': first_item.get('algo_version', 'Not processed yet'),
+        'Requested_time': first_item.get('start_time', 'Not processed yet'),
+        'total_claims': total_claims
+    }
+    
+    # Handle special cases
+    if 'error' in first_item or first_item.get('status') == 'error':
+        result.update({k: 'processing error' for k in result if k not in ['algo_version', 'Requested_time']})
+        return result
+        
+    if len(response) < 2 or response[1].get('Result') == 'No available URLs':
+        result.update({k: 'No external URLs' for k in result if k not in ['algo_version', 'Requested_time']})
+        return result
+    
+    # Process normal results
+    details = pd.DataFrame(response[1:])
+    
+    # Calculate counts for SUPPORTS, REFUTES, NOT ENOUGH INFO, and ERROR
+    supports_count = details[details['result'] == 'SUPPORTS'].shape[0]
+    refutes_count = details[details['result'] == 'REFUTES'].shape[0]
+    not_enough_info_count = details[details['result'] == 'NOT ENOUGH INFO'].shape[0]
+    error_count = details[details['result'] == 'error'].shape[0]
+
+    # Calculate reference score using the sum of all relevant counts
+    total_counts = supports_count + refutes_count + not_enough_info_count + error_count
+
+    # Calculate reference score
+    result['Reference_score'] = (supports_count - refutes_count) / total_counts if total_counts else None
+    
+    # Group results by type
+    for result_type in ['REFUTES', 'NOT ENOUGH INFO', 'SUPPORTS', 'error']:
+        result[result_type] = details[details['result'] == result_type].to_dict()
+    
+    return result
 
 if __name__ == "__main__":
     #requestItemProcessing('Q44')

@@ -170,3 +170,5 @@ API_key.txt
 *.out
 CodeArchive/
 reference_checked.db
+error.log.1
+output.log.1

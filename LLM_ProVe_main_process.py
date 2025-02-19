@@ -1,6 +1,6 @@
 from wikidata_parser import WikidataParser
 from refs_html_collection import HTMLFetcher
-from refs_html_to_evidences import HTMLSentenceProcessor, EvidenceSelector
+from LLM_refs_html_to_evidences import HTMLSentenceProcessor, EvidenceSelector
 from claim_entailment import ClaimEntailmentChecker
 from utils.textual_entailment_module import TextualEntailmentModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
@@ -13,6 +13,7 @@ def initialize_models():
     sentence_retrieval = SentenceRetrievalModule(max_len=512)
     verb_module = VerbModule()
     return text_entailment, sentence_retrieval, verb_module
+
 
 def process_entity(qid: str, models: tuple) -> tuple:
     """
