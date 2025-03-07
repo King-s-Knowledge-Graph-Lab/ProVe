@@ -8,7 +8,7 @@ from utils.verbalisation_module import VerbModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 import numpy as np
 import uuid
-from LLM_inference_manager import LLMInference
+from .LLM_inference_manager import LLMInference
 import time
 
 

@@ -8,7 +8,7 @@ import yaml
 import schedule
 from pymongo import MongoClient
 from datetime import datetime
-import LLM_ProVe_main_process
+from . import LLM_ProVe_main_process
 from threading import Lock
 import signal
 import sys

@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 from ProVe_main_service import MongoDBHandler
-from LLM_ProVe_main_service import MongoDBHandler as LLM_MongoDBHandler
+from LLMs.LLM_ProVe_main_service import MongoDBHandler as LLM_MongoDBHandler
 
 mongo_handler = MongoDBHandler()
 LLM_mongo_handler = LLM_MongoDBHandler()
