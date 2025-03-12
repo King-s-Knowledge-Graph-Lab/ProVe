@@ -1,0 +1,50 @@
+Check the status of an item
+This endpoint returns the status of a specific item identified by its QID.
+---
+parameters:
+  - name: qid
+    in: query
+    type: string
+    required: true
+    description: The QID of the item to check.
+    example: "Q42"
+responses:
+  200:
+    description: The status of the item.
+    schema:
+      type: object
+      properties:
+        algo_version:
+          type: string
+          example: "1.1.1"
+        qid:
+          type: string
+          example: "Q42"
+        status:
+          type: string
+          example: "completed"
+        task_id:
+          type: string
+          example: "f01db2e5-49fb-40c0-98fc-f5a3d3c16576"
+    examples:
+      application/json:
+        algo_version: "1.1.1"
+        qid: "Q42"
+        status: "completed"
+        task_id: "f01db2e5-49fb-40c0-98fc-f5a3d3c16576"
+  400:
+    description: Bad Request - Missing or invalid 'qid' parameter.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing 'qid' parameter"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while checking the item status."

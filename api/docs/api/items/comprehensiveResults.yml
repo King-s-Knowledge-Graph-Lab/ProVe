@@ -1,0 +1,253 @@
+Retrieve comprehensive results for a given item
+This endpoint returns detailed results for a specific item identified by its QID.
+---
+parameters:
+  - name: qid
+    in: query
+    type: string
+    required: true
+    description: The QID of the item to retrieve comprehensive results for.
+    example: "Q42"
+responses:
+  200:
+    description: A JSON object containing comprehensive results for the item.
+    schema:
+      type: object
+      properties:
+        NOT ENOUGH INFO:
+          type: object
+          properties:
+            property_id:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"6": "P570", "7": "P106"}
+            qid:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"6": "+2001-05-11T00:00:00Z", "7": "Q18844224"}
+            result:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"6": "NOT ENOUGH INFO", "7": "NOT ENOUGH INFO"}
+            result_sentence:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"6": "Source language: (None) / Other works included novels **Dirk Gently's...", "7": "Source language: (fr) / Aller au contenu"}
+            triple:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"6": "Douglas Adams date of death +2001-05-11T00:00:00Z", "7": "Douglas Adams occupation science fiction writer"}
+            url:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"6": "https://www.locusmag.com/2001/News/News05a.html", "7": "https://catalogue.bnf.fr/ark:/12148/cb11888092r"}
+        REFUTES:
+          type: object
+          properties:
+            property_id:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"12": "P1196"}
+            qid:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"12": "Q3739104"}
+            result:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"12": "REFUTES"}
+            result_sentence:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"12": "Source language: (None) / He died later at Cottage Hospital."}
+            triple:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"12": "Douglas Adams manner of death natural causes"}
+            url:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"12": "https://web.archive.org/web/20111010233102/http://www.laweekly.com/2001-05-24/news/lots-of-screamingly-funny-sentences-no-fish/"}
+        Reference_score:
+          type: number
+          example: 0.3448275862068966
+        Requested_time:
+          type: string
+          format: date-time
+          example: "2025-02-26T13:25:24.623Z"
+        SUPPORTS:
+          type: object
+          properties:
+            property_id:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"0": "P20", "2": "P19"}
+            qid:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"0": "Q159288", "2": "Q350"}
+            result:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"0": "SUPPORTS", "2": "SUPPORTS"}
+            result_sentence:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"0": "Source language: (en) / By the time of his death...", "2": "Source language: (en) / Adams was born in Cambridge..."}
+            triple:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"0": "Douglas Adams place of death Santa Barbara", "2": "Douglas Adams place of birth Cambridge"}
+            url:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"0": "http://www.waymarking.com/waymarks/WMH912_Douglas_Adams_Highgate_East_Cemetery_London_UK", "2": "http://www.theguardian.com/news/2001/may/15/guardianobituaries.books"}
+        algo_version:
+          type: string
+          example: "1.1.1"
+        error:
+          type: object
+          properties:
+            property_id:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"1": "P69", "3": "P106"}
+            qid:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"1": "Q4961791", "3": "Q28389"}
+            result:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"1": "error", "3": "error"}
+            result_sentence:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"1": "Source language: (None) / HTTP Error code: 404", "3": "Source language: (None) / HTTP Error code: 408"}
+            triple:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"1": "Douglas Adams educated at Brentwood School", "3": "Douglas Adams occupation screenwriter"}
+            url:
+              type: object
+              additionalProperties:
+                type: string
+              example: {"1": "http://www.brentwoodschool.co.uk/Notable-Old-Brentwoods", "3": "http://www.jinni.com/tv/the-hitchhikers-guide-to-the-galaxy/cast-crew/"}
+        total_claims:
+          type: integer
+          example: 326
+    examples:
+      application/json:
+        NOT ENOUGH INFO:
+          property_id:
+            6: "P570"
+            7: "P106"
+          qid:
+            6: "+2001-05-11T00:00:00Z"
+            7: "Q18844224"
+          result:
+            6: "NOT ENOUGH INFO"
+            7: "NOT ENOUGH INFO"
+          result_sentence:
+            6: "Source language: (None) / Other works included novels **Dirk Gently's..."
+            7: "Source language: (fr) / Aller au contenu"
+          triple:
+            6: "Douglas Adams date of death +2001-05-11T00:00:00Z"
+            7: "Douglas Adams occupation science fiction writer"
+          url:
+            6: "https://www.locusmag.com/2001/News/News05a.html"
+            7: "https://catalogue.bnf.fr/ark:/12148/cb11888092r"
+        REFUTES:
+          property_id:
+            12: "P1196"
+          qid:
+            12: "Q3739104"
+          result:
+            12: "REFUTES"
+          result_sentence:
+            12: "Source language: (None) / He died later at Cottage Hospital."
+          triple:
+            12: "Douglas Adams manner of death natural causes"
+          url:
+            12: "https://web.archive.org/web/20111010233102/http://www.laweekly.com/2001-05-24/news/lots-of-screamingly-funny-sentences-no-fish/"
+        Reference_score: 0.3448275862068966
+        Requested_time: "2025-02-26T13:25:24.623Z"
+        SUPPORTS:
+          property_id:
+            0: "P20"
+            2: "P19"
+          qid:
+            0: "Q159288"
+            2: "Q350"
+          result:
+            0: "SUPPORTS"
+            2: "SUPPORTS"
+          result_sentence:
+            0: "Source language: (en) / By the time of his death..."
+            2: "Source language: (en) / Adams was born in Cambridge..."
+          triple:
+            0: "Douglas Adams place of death Santa Barbara"
+            2: "Douglas Adams place of birth Cambridge"
+          url:
+            0: "http://www.waymarking.com/waymarks/WMH912_Douglas_Adams_Highgate_East_Cemetery_London_UK"
+            2: "http://www.theguardian.com/news/2001/may/15/guardianobituaries.books"
+        algo_version: "1.1.1"
+        error:
+          property_id:
+            1: "P69"
+            3: "P106"
+          qid:
+            1: "Q4961791"
+            3: "Q28389"
+          result:
+            1: "error"
+            3: "error"
+          result_sentence:
+            1: "Source language: (None) / HTTP Error code: 404"
+            3: "Source language: (None) / HTTP Error code: 408"
+          triple:
+            1: "Douglas Adams educated at Brentwood School"
+            3: "Douglas Adams occupation screenwriter"
+          url:
+            1: "http://www.brentwoodschool.co.uk/Notable-Old-Brentwoods"
+            3: "http://www.jinni.com/tv/the-hitchhikers-guide-to-the-galaxy/cast-crew/"
+        total_claims: 326
+  400:
+    description: Bad Request - Missing or invalid 'qid' parameter.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing 'qid' parameter"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while retrieving the comprehensive results."

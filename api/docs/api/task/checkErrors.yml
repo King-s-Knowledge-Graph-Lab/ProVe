@@ -1,0 +1,41 @@
+Retrieve a list of tasks that encountered errors.
+This endpoint returns a JSON array of tasks with an "error" status.
+---
+parameters: []
+responses:
+  200:
+    description: A JSON array containing tasks with errors.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          qid:
+            type: string
+            description: The QID associated with the task.
+            example: "Q13030902"
+          request_type:
+            type: string
+            description: The type of request associated with the task.
+            example: "random_running"
+          start_time:
+            type: string
+            format: date-time
+            description: The start time of the task.
+            example: "2024-07-26T16:22:29.426326"
+          status:
+            type: string
+            description: The status of the task.
+            example: "error"
+          task_id:
+            type: string
+            description: A unique identifier for the task.
+            example: "25d91b04-1142-40c5-bf7e-ff8641e88a5a"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while retrieving errored tasks."

@@ -1,0 +1,129 @@
+Retrieve the service configuration
+This endpoint returns the current configuration of the service.
+---
+parameters: []
+responses:
+  200:
+    description: A JSON object containing the service configuration
+    schema:
+      type: object
+      properties:
+        database:
+          type: object
+          properties:
+            name:
+              type: string
+              example: "wikidata_claims_refs_parsed.db"
+            result_db_for_API:
+              type: string
+              example: "/home/ubuntu/mntdisk/reference_checked.db"
+        version:
+          type: object
+          properties:
+            algo_version:
+              type: string
+              example: "1.1.1"
+        parsing:
+          type: object
+          properties:
+            reset_database:
+              type: boolean
+              example: true
+        spacy:
+          type: object
+          properties:
+            model:
+              type: string
+              example: "en_core_web_sm"
+        html_fetching:
+          type: object
+          properties:
+            batch_size:
+              type: integer
+              example: 10
+            delay:
+              type: number
+              format: float
+              example: 1.0
+            fetching_driver:
+              type: string
+              example: "chrome"
+            timeout:
+              type: integer
+              example: 15
+        logging:
+          type: object
+          properties:
+            level:
+              type: string
+              example: "INFO"
+            format:
+              type: string
+              example: "%(asctime)s - %(levelname)s - %(message)s"
+        text_processing:
+          type: object
+          properties:
+            sentence_slide:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+                window_size:
+                  type: integer
+                  example: 2
+                join_char:
+                  type: string
+                  example: " "
+        evidence_selection:
+          type: object
+          properties:
+            batch_size:
+              type: integer
+              example: 256
+            n_top_sentences:
+              type: integer
+              example: 5
+            score_threshold:
+              type: integer
+              example: 0
+            token_size:
+              type: integer
+              example: 512
+    examples:
+      application/json:
+        database:
+          name: "wikidata_claims_refs_parsed.db"
+          result_db_for_API: "/home/ubuntu/mntdisk/reference_checked.db"
+        version:
+          algo_version: "1.1.1"
+        parsing:
+          reset_database: true
+        spacy:
+          model: "en_core_web_sm"
+        html_fetching:
+          batch_size: 10
+          delay: 1.0
+          fetching_driver: "chrome"
+          timeout: 15
+        logging:
+          level: "INFO"
+          format: "%(asctime)s - %(levelname)s - %(message)s"
+        text_processing:
+          sentence_slide:
+            enabled: true
+            window_size: 2
+            join_char: " "
+        evidence_selection:
+          batch_size: 256
+          n_top_sentences: 5
+          score_threshold: 0
+          token_size: 512
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while retrieving the configuration."

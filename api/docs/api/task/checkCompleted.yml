@@ -1,0 +1,41 @@
+Retrieve the list of completed tasks.
+This endpoint returns a list of completed tasks, each containing information about the request type, start time, status, and task ID.
+---
+parameters: []
+responses:
+  200:
+    description: A JSON array containing completed tasks.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          qid:
+            type: string
+            description: The QID associated with the task.
+            example: "Q30518972"
+          request_type:
+            type: string
+            description: The type of request associated with the task.
+            example: "random_running"
+          start_time:
+            type: string
+            format: date-time
+            description: The start time of the task.
+            example: "2024-08-07T16:19:50.419996"
+          status:
+            type: string
+            description: The status of the task.
+            example: "completed"
+          task_id:
+            type: string
+            description: A unique identifier for the task.
+            example: "f203cd7e-573e-4b8d-a495-57f89b9385ef"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while retrieving completed tasks."

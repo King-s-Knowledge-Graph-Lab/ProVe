@@ -1,0 +1,71 @@
+Page View for Page Pile Worklist
+This endpoint returns an HTML page displaying a worklist generated from a Page Pile.
+---
+responses:
+  200:
+    description: Successfully retrieved the Page Pile worklist page.
+    content:
+      text/html:
+        example: |
+          <!DOCTYPE html>
+          <html lang="ko">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Worklist</title>
+              <style>
+                  table {
+                      border-collapse: collapse;
+                      width: 100%;
+                      margin-bottom: 20px;
+                  }
+                  th, td {
+                      border: 1px solid black;
+                      padding: 8px;
+                      text-align: left;
+                  }
+                  th {
+                      background-color: #f2f2f2;
+                  }
+                  h2 {
+                      margin-top: 30px;
+                  }
+              </style>
+          </head>
+          <body>
+              <h1>Worklist</h1>
+              <table>
+                  <thead>
+                      <tr>
+                          <th>qid</th>
+                          <th>Title</th>
+                          <th>Category</th>
+                          <th>Page Views</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      <tr>
+                          <td>Q12345</td>
+                          <td>Sample Article 1</td>
+                          <td>Science</td>
+                          <td>1500</td>
+                      </tr>
+                      <tr>
+                          <td>Q67890</td>
+                          <td>Sample Article 2</td>
+                          <td>History</td>
+                          <td>980</td>
+                      </tr>
+                  </tbody>
+              </table>
+          </body>
+          </html>
+  500:
+    description: Internal Server Error - An error occurred while generating the worklist page.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message.
+          example: "An unexpected error occurred"

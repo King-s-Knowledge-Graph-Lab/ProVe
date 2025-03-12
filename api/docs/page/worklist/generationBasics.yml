@@ -1,0 +1,75 @@
+Page View for Worklist Generation - Basic Statistics
+This endpoint returns an HTML page displaying a worklist with basic citation statistics.
+---
+responses:
+  200:
+    description: Successfully retrieved the worklist page.
+    content:
+      text/html:
+        example: |
+          <!DOCTYPE html>
+          <html lang="ko">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>worklist</title>
+              <style>
+                  table {
+                      border-collapse: collapse;
+                      width: 100%;
+                      margin-bottom: 20px;
+                  }
+                  th, td {
+                      border: 1px solid black;
+                      padding: 8px;
+                      text-align: left;
+                  }
+                  th {
+                      background-color: #f2f2f2;
+                  }
+                  h2 {
+                      margin-top: 30px;
+                  }
+              </style>
+          </head>
+          <body>
+              <h1>worklist</h1>
+              <h2>TOP_Cited_Items</h2>
+              <table>
+                  <thead>
+                      <tr>
+                          <th>qid</th>
+                          <th>NOT ENOUGH INFO</th>
+                          <th>N_connected_site</th>
+                          <th>REFUTES</th>
+                          <th>SUPPORTS</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      <tr>
+                          <td>Q30</td>
+                          <td>383</td>
+                          <td>406</td>
+                          <td>68</td>
+                          <td>197</td>
+                      </tr>
+                      <tr>
+                          <td>Q43</td>
+                          <td>156</td>
+                          <td>402</td>
+                          <td>10</td>
+                          <td>10</td>
+                      </tr>
+                  </tbody>
+              </table>
+          </body>
+          </html>
+  500:
+    description: Internal Server Error - An error occurred while generating the worklist page.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message.
+          example: "An unexpected error occurred"

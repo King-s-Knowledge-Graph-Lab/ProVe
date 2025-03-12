@@ -1,0 +1,44 @@
+Worklist Generation - Basic Statistics
+This endpoint generates a worklist containing basic citation statistics for different QIDs.
+---
+responses:
+  200:
+    description: Successfully retrieved worklist statistics.
+    schema:
+      type: object
+      properties:
+        TOP_Cited_Items:
+          type: array
+          description: A list of items with citation statistics.
+          items:
+            type: object
+            properties:
+              qid:
+                type: string
+                description: The QID of the item.
+                example: "Q30"
+              NOT ENOUGH INFO:
+                type: integer
+                description: The count of citations categorized as "NOT ENOUGH INFO".
+                example: 383
+              N_connected_site:
+                type: integer
+                description: The count of connected sites.
+                example: 406
+              REFUTES:
+                type: integer
+                description: The count of citations categorized as "REFUTES".
+                example: 68
+              SUPPORTS:
+                type: integer
+                description: The count of citations categorized as "SUPPORTS".
+                example: 197
+  500:
+    description: Internal Server Error - An error occurred while generating the worklist.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message.
+          example: "An unexpected error occurred"

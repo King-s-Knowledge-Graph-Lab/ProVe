@@ -1,0 +1,60 @@
+Request processing for a specific item.
+This endpoint triggers a processing request for an item identified by its QID.
+---
+parameters:
+  - name: qid
+    in: query
+    type: string
+    required: true
+    description: The QID of the item to process.
+    example: "Q42"
+  - name: username
+    in: query
+    type: string
+    required: false
+    description: The username of the requester.
+    example: "username"
+responses:
+  202:
+    description: Request successfully received and being processed.
+    schema:
+      type: object
+      properties:
+        reuqest_result:
+          type: string
+          description: The result of the request.
+          example: "success"
+        message:
+          type: string
+          description: A message confirming the task creation.
+          example: "Task 62d09112-d2e1-4eb8-b1f4-172a698fc3f9 created for QID Q42"
+        qid:
+          type: string
+          description: The QID associated with the request.
+          example: "Q42"
+        username:
+          type: string
+          description: The username of the requester.
+          example: "username"
+  400:
+    description: Bad Request - Missing or invalid parameters.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing 'qid' parameter"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        reuqest_result:
+          type: string
+          example: "error"
+        message:
+          type: string
+          example: "An error occurred while processing your request"
+        error:
+          type: string
+          example: "Detailed error message"
