@@ -1,0 +1,39 @@
+Plot Page
+This endpoint returns an HTML page containing a Plotly visualization.
+---
+responses:
+  200:
+    description: Successfully generated the Plotly plot page.
+    content:
+      text/html:
+        example: |
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Plot</title>
+              <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+          </head>
+          <body>
+              <h1>Plot Visualization</h1>
+              <div id="plot"></div>
+              <script>
+                  var data = [{
+                      x: ['Category A', 'Category B', 'Category C'],
+                      y: [10, 15, 7],
+                      type: 'bar'
+                  }];
+                  Plotly.newPlot('plot', data);
+              </script>
+          </body>
+          </html>
+  500:
+    description: Internal Server Error - An error occurred while generating the plot page.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message.
+          example: "An unexpected error occurred"

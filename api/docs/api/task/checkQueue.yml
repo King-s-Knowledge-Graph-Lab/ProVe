@@ -1,0 +1,18 @@
+Check the current task queue
+This endpoint returns the current list of items in the task queue.
+---
+parameters: []
+responses:
+  200:
+    description: A JSON object containing the current task queue.
+    schema:
+      type: object
+      properties:
+        queue:
+          type: array
+          items:
+            type: string
+          example: ["Q1", "Q2", "Q3"]
+    examples:
+      application/json:
+        queue: ["Q1", "Q2", "Q3"]

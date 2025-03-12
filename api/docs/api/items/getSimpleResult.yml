@@ -1,0 +1,78 @@
+Retrieve a simple result for a given item
+This endpoint returns a simple result for a specific item identified by its QID.
+---
+parameters:
+  - name: qid
+    in: query
+    type: string
+    required: true
+    description: The QID of the item to retrieve.
+    example: "Q42"
+responses:
+  200:
+    description: A list of objects containing the simple result for the item.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          algo_version:
+            type: string
+            example: "1.1.1"
+          qid:
+            type: string
+            example: "Q42"
+          start_time:
+            type: string
+            format: date-time
+            example: "2025-02-26T13:25:24.623Z"
+          status:
+            type: string
+            example: "completed"
+          task_id:
+            type: string
+            example: "f01db2e5-49fb-40c0-98fc-f5a3d3c16576"
+          property_id:
+            type: string
+            example: "P20"
+          result:
+            type: string
+            example: "SUPPORTS"
+          result_sentence:
+            type: string
+            example: "Source language: (en) / By the time of\n> his death he had just finished a draft of the screenplay to a feature movie\n> of Hitchhikers Guide to the Galaxy._ _Douglas was cremated in Santa Barbara\n> and is buried in Highgate Cemetery (East), Highgate, London, England, plot:\n> Square 74, Plot 52377."
+          triple:
+            type: string
+            example: "Douglas Adams place of death Santa Barbara"
+          url:
+            type: string
+            example: "http://www.waymarking.com/waymarks/WMH912_Douglas_Adams_Highgate_East_Cemetery_London_UK"
+    examples:
+      application/json:
+        - algo_version: "1.1.1"
+          qid: "Q42"
+          start_time: "2025-02-26T13:25:24.623Z"
+          status: "completed"
+          task_id: "f01db2e5-49fb-40c0-98fc-f5a3d3c16576"
+        - property_id: "P20"
+          qid: "Q159288"
+          result: "SUPPORTS"
+          result_sentence: "Source language: (en) / By the time of\n> his death he had just finished a draft of the screenplay to a feature movie\n> of Hitchhikers Guide to the Galaxy._ _Douglas was cremated in Santa Barbara\n> and is buried in Highgate Cemetery (East), Highgate, London, England, plot:\n> Square 74, Plot 52377."
+          triple: "Douglas Adams place of death Santa Barbara"
+          url: "http://www.waymarking.com/waymarks/WMH912_Douglas_Adams_Highgate_East_Cemetery_London_UK"
+  400:
+    description: Bad Request - Missing or invalid 'qid' parameter.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing 'qid' parameter"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while retrieving the item."

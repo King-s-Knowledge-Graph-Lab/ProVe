@@ -10,7 +10,7 @@ import os, json
 
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True) 
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 template = {
   "swagger": "2.0",
@@ -29,6 +29,7 @@ template = {
 }
 Swagger(app, template=template)
 PATH = Path(__file__).parent.absolute()
+
 
 @app.route('/api/config', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/config.yml')
@@ -276,56 +277,6 @@ def page_view_for_page_pile():
 def plotingPilot():
     item = functions.plot_status()
     return render_template_string(item)
-
-
-@app.route('/api/items/checkItemStatus_LLM', methods=['GET'])
-@swag_from(f'{PATH}/docs/api/items/checkItemStatus.yml')
-def CheckItemStatus_LLM_route():
-    target_id = request.args.get('qid')
-    if target_id is None:
-        return jsonify({"error": "Missing 'qid' parameter"}), 400
-    try:
-        item = functions.CheckItemStatus_LLM(target_id)
-        return jsonify(item), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/requests/requestItem_LLM', methods=['GET'])
-@swag_from(f'{PATH}/docs/api/requests/requestItem.yml')
-def requestItem_LLM_route():
-    target_id = request.args.get('qid')
-    username = request.args.get('username')
-    if not target_id:
-        return jsonify({"error": "Missing 'qid' parameter"}), 400
-    if not target_id.startswith('Q'):
-        return jsonify({"error": "Invalid 'qid' format"}), 400
-    try:
-        result = functions.requestItemProcessing_LLM(target_id)
-        return jsonify({
-            "request_result": "success",
-            "message": result,
-            "qid": target_id,
-            "username": username
-        }), 202
-    except Exception as e:
-        app.logger.error(f"Error processing LLM request for QID {target_id}: {str(e)}")
-        return jsonify({
-            "request_result": "error",
-            "message": "An error occurred while processing your LLM request",
-            "error": str(e)
-        })
-
-
-@app.route('/api/items/CompResult_LLM', methods=['GET'])
-@swag_from(f'{PATH}/docs/api/items/comprehensiveResults.yml')
-def comprehensive_results_LLM_route():
-    target_id = request.args.get('qid')
-    try:
-        item = functions.comprehensive_results_LLM(target_id)
-        return item, 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
