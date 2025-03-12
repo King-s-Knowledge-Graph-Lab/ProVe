@@ -172,3 +172,6 @@ CodeArchive/
 reference_checked.db
 error.log.1
 output.log.1
+error.log2.gz
+output.log2.gz
+tester.py

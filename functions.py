@@ -9,10 +9,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 from ProVe_main_service import MongoDBHandler
-from LLMs.LLM_ProVe_main_service import MongoDBHandler as LLM_MongoDBHandler
+# from LLM_ProVe_main_service import MongoDBHandler as LLM_MongoDBHandler
 
 mongo_handler = MongoDBHandler()
-LLM_mongo_handler = LLM_MongoDBHandler()
+# LLM_mongo_handler = LLM_MongoDBHandler()
 
 #Params.
 def load_config(config_path: str):
@@ -164,7 +164,7 @@ def GetItem(target_id):
                 'status': mongo_status['status'],
                 'algo_version': mongo_status['algo_version'],
                 'start_time': mongo_status['requested_timestamp'].strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-                if isinstance(mongo_status['requested_timestamp'], datetime) 
+                if isinstance(mongo_status['requested_timestamp'], datetime)
                 else mongo_status['requested_timestamp']
             }
             
@@ -421,6 +421,7 @@ def dataframe_to_json(df):
 def generation_worklists():
     full_df = pd.DataFrame(get_full_data(db_path, 'aggregated_results')).set_index('id')
     latest_entries = finding_latest_entries(full_df)
+    print(latest_entries['url'])
     latest_entries['url_domain'] = latest_entries['url'].apply(extract_domain)
     url = "https://quarry.wmcloud.org/run/888614/output/0/csv"
     df = pd.read_csv(url)
@@ -667,5 +668,5 @@ def comprehensive_results_LLM(target_id):
 
 if __name__ == "__main__":
     #requestItemProcessing('Q44')
-    GetItem('Q44')
+    generation_worklists()
     pass
