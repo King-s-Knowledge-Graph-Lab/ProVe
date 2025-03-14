@@ -10,7 +10,7 @@ const statusMapping = {
     "NOT ENOUGH INFO": "Inconclusive",
     "error": "Irretrievable"
 };
-let sortOrder = false;
+let sortOrder = {};
 
 function capitalizeFirstLetter(val) {
     return String(val).charAt(0).toUpperCase() + String(val).slice(1).toLowerCase();
@@ -216,7 +216,7 @@ function updateProveHealthIndicator(data, qid) {
 	
 	var hoverContent = `
 	    ProVe v${algoVersion}<br>
-	    Last update: ${currentDateTime}<br>
+	    Last updated on ${currentDateTime}<br>
 	    <span id="hover-non-authoritative" class="hover-item">
             Non-authoritative: ${refutesCount} (${(refutesCount / totalCount * 100).toFixed(1)}%)
         </span>
@@ -365,16 +365,17 @@ function createProveTables(data, $labelsParent) {
         });
     });
 
+
     table.find('th.sortable').click(function () {
         const sortBy = $(this).data('sort');
         let sortedData = [...categoryData].sort((a, b) => (a[sortBy] || "").localeCompare(b[sortBy] || ""));;
-        if (!sortOrder) sortedData = sortedData.reverse();
-        sortOrder = !sortOrder;
-        updateSortArrow(sortOrder);
+        if (!sortOrder[sortBy]) sortedData = sortedData.reverse();
+        sortOrder[sortBy] = !sortOrder[sortBy];
+        updateSortArrow(sortOrder[sortBy], sortBy);
         tbody.empty();
         sortedData.forEach((element) => addRow(element, tbody));
     });
-    table.find('th.sortable').click();
+    table.find('th[data-sort="result_status"]').click();
 
 
     let isProveActive = false;
@@ -417,11 +418,15 @@ function transformData(categoryData) {
     return result;
 }
 
-function updateSortArrow(sortOrder) {
-    const $arrow = $('th[data-sort="result_status"] .sort-arrow');
+function updateSortArrow(sortOrder, sortBy) {
+    const $arrow = $(`th[data-sort="${sortBy}"] .sort-arrow`);
     
-    if (sortOrder) $arrow.removeClass('rotate-down').addClass('rotate-up');
-    else $arrow.removeClass('rotate-up').addClass('rotate-down');
+    $(`.sort-arrow`).each(function() {
+        if (!$(this).hasClass('hidden')) $(this).addClass('hidden');
+    });
+
+    if (sortOrder) $arrow.removeClass('rotate-down').removeClass('hidden').addClass('rotate-up');
+    else $arrow.removeClass('rotate-up').removeClass('hidden').addClass('rotate-down');
 }
 
 function createTable() {
@@ -430,12 +435,22 @@ function createTable() {
             <table>
                 <thead>
                     <tr>
-                        <th>Statements</th>
-                        <th>Don't Know What to Call</th>
-                        <th class="sortable" data-sort="result_status">
-                            Status <span class="sort-arrow"></span>
+                        <th class="sortable" data-sort="triple">
+                            Statements
+                            <span class="sort-arrow hidden"></span>
                         </th>
-                        <th>Reference</th>
+                        <th class="sortable" data-sort="result_sentence">
+                            Description
+                            <span class="sort-arrow hidden"></span>
+                        </th>
+                        <th class="sortable" data-sort="result_status">
+                            Status code
+                            <span class="sort-arrow hidden"></span>
+                        </th>
+                        <th  class="sortable" data-sort="reference">
+                            Reference
+                            <span class="sort-arrow hidden"></span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -717,6 +732,9 @@ function addStyles() {
             }
 
 
+            .hidden {
+                visibility: hidden;
+            }
             .hover-item {
                 width: 100%;
                 display: flex;
