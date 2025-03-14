@@ -1,0 +1,16 @@
+pandas
+pyyaml
+plotly
+sparqlwrapper
+schedule
+pymongo
+qwikidata
+nltk
+bs4
+selenium
+html2text
+pytorch_lightning
+rouge_score
+sacrebleu
+transformers
+boto3
