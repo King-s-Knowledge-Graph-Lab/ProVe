@@ -53,6 +53,17 @@ function displayStatementStats(data) {
     const errors = Object.values(data['error']?.result || {}).length;
     const totalCount = supportsCount + refutesCount + notEnoughInfoCount + errors;
 
+    let statementsHashmap = new Map();
+    for (entry of ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO", "error"]) {
+        if (entry in data) {
+            new Map(Object.entries(data[entry]?.property_id)).forEach((value) => {
+                const current = statementsHashmap.get(value) ? statementsHashmap.get(value) : 0;
+                statementsHashmap.set(value, 1 + current);
+            });
+        };
+    };
+    const externalReferences = statementsHashmap.values().reduce((sum, num) => sum + num);
+
 
     const $statsContainer = $('<div id="prove-stats"></div>').css({
         'margin-bottom': '10px',
@@ -65,9 +76,13 @@ function displayStatementStats(data) {
         <div>
             This item has ${stats.total} statements. <br>
             <ul>
-                <li>${stats.total - stats.missing - supportsCount} statements have internal references (not checked by ProVe).</li>
+                <li>${stats.total - stats.missing - statementsHashmap.size} statements have internal references (not checked by ProVe).</li>
                 <li>${stats.missing} statements do not have references.</li>
-                <li>${supportsCount} statements have ${supportsCount + errors} external references, with the following verification results:</li>
+                <li>
+                    ${statementsHashmap.size} statements have 
+                    ${externalReferences} 
+                    external references, with the following verification results.
+                </li>
             </ul>
         </div>`;
 
