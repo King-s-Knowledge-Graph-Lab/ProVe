@@ -10,7 +10,8 @@ const statusMapping = {
     "NOT ENOUGH INFO": "Inconclusive",
     "error": "Irretrievable"
 };
-let sortOrder = {};
+const sortOrder = {};
+const activeFilters = new Set();
 
 function capitalizeFirstLetter(val) {
     return String(val).charAt(0).toUpperCase() + String(val).slice(1).toLowerCase();
@@ -41,18 +42,11 @@ function calculateStatementStats() {
 function displayStatementStats(data) {
     // Check if the data object is available
     if (!data) {
-        console.error('Data is missing, cannot display statement stats.');
         return;
     }
 
     // Calculate the statement statistics
     const stats = calculateStatementStats();
-    const supportsCount = Object.values(data.SUPPORTS?.result || {}).length;
-    const refutesCount = Object.values(data.REFUTES?.result || {}).length;
-    const notEnoughInfoCount = Object.values(data['NOT ENOUGH INFO']?.result || {}).length;
-    const errors = Object.values(data['error']?.result || {}).length;
-    const totalCount = supportsCount + refutesCount + notEnoughInfoCount + errors;
-
     let statementsHashmap = new Map();
     for (entry of ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO", "error"]) {
         if (entry in data) {
@@ -69,10 +63,11 @@ function displayStatementStats(data) {
         'margin-bottom': '10px',
 	    'font-weight': 'bold',
 	    'padding': '1px 8px',
-	    'box-sizing': 'border-box'
+	    'box-sizing': 'border-box',
+        'display': 'flex'
     });
 
-    let text = `
+    let $statsDiv = $(`
         <div>
             This item has ${stats.total} statements. <br>
             <ul>
@@ -84,9 +79,9 @@ function displayStatementStats(data) {
                     external references, with the following verification results.
                 </li>
             </ul>
-        </div>`;
+        </div>`);
 
-    $statsContainer.append(text);
+    $statsContainer.append($statsDiv);
 
     if (stats.missing > 0) {
         const $focusButton = $('<button>Click here to start adding references to statements with no references</button>').css({
@@ -139,22 +134,17 @@ function displayStatementStats(data) {
             }
         });
 
-        $statsContainer.append($focusButton);
+        $statsDiv.append($focusButton);
     }
 
     return $statsContainer;
 }
 
-function updateProveHealthIndicator(data, qid) {
-    var $indicators = $('div.mw-indicators');
+function updateProveHealthIndicator(data, qid, container) {
     var healthValue = data.Reference_score;
     const totalStatements = calculateStatementStats().total;
 
-    var $proveContainer = $('<div class="prove-container"></div>').css({
-        'display': 'flex',
-        'align-items': 'center',
-        'margin-left': '10px'
-    });
+    var $proveContainer = $('<div class="prove-container"></div>')
 
     if (typeof healthValue === 'number') {
         healthValue = healthValue.toFixed(2);
@@ -177,8 +167,6 @@ function updateProveHealthIndicator(data, qid) {
     }
 
     var $healthIndicator = $('<span>').css({
-        'margin-left': '10px',
-        'top': '-5px',
         'cursor': 'pointer',
         'position': 'relative',
         'display': 'inline-flex',
@@ -224,7 +212,7 @@ function updateProveHealthIndicator(data, qid) {
             Irrelevant: ${notEnoughInfoCount} (${(notEnoughInfoCount / totalCount * 100).toFixed(1)}%)
         </span>
 	    <span id="hover-support" class="hover-item">
-            Supports: ${supportsCount} (${(supportsCount / totalCount * 100).toFixed(1)}%)
+            Supportive: ${supportsCount} (${(supportsCount / totalCount * 100).toFixed(1)}%)
         </span>
         <span id="hover-irretrievable" class="hover-item">
             Irretrievable: ${errors} (${(errors / totalCount * 100).toFixed(1)}%)
@@ -261,13 +249,13 @@ function updateProveHealthIndicator(data, qid) {
 	);
 	
 	var $proveLink = $('<a>')
-	    .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe')
+	    .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe#How_ProVe_Works')
 	    .attr('target', '_blank')
 	    .attr('title', 'Click to visit Wikidata:ProVe page')
 	    .append($healthIndicator);
 	
 	$proveContainer.append($proveLink);
-	$indicators.append($proveContainer);
+	container.append($proveContainer);
 
 
     // Add button logic
@@ -324,22 +312,37 @@ function updateProveHealthIndicator(data, qid) {
 	$proveContainer.append($button);
 }
 
-function createProveTables(data, $labelsParent) {
-    const $container = $('<div id="prove-container"></div>');
+function createProveTables(data, container) {
     const $statsContainer = displayStatementStats(data).hide();
     const $buttonContainer = $('<div id="prove-buttons"></div>');
     const $toggleButton = $('<button id="prove-toggle">Show/Hide Reference Results</button>');
+    const $filterContainer = $('<div id="prove-filters" style="display: none;"></div>')
     const $tablesContainer = $('<div id="prove-tables" style="display: none;"></div>');
 
     $buttonContainer.append($toggleButton);
-    $container.append($buttonContainer).append($statsContainer).append($tablesContainer);
+    container.append($buttonContainer).append($statsContainer).append($filterContainer).append($tablesContainer);
 
     const categories = [
         { name: "REFUTES", label: "Non-authoritative", color: "#f9e6e6" },
-        { name: "NOT ENOUGH INFO", label: "Potentially irrelevant", color: "#fff9e6" },
-        { name: "SUPPORTS", label: "Potentially supportive", color: "#e6f3e6" },
+        { name: "NOT ENOUGH INFO", label: "Irrelevant", color: "#fff9e6" },
+        { name: "SUPPORTS", label: "Supportive", color: "#e6f3e6" },
         { name: "error", label: "Irretrievable", color: "#e6e6f3" }
     ];
+    
+    let filters = '<p> Filters: </p>';
+    filters += '<div style="display: flex;">';
+    categories.forEach((category) => {
+        const categoryStatus = Object.values(data[category.name]?.qid || {}).length > 0;
+        filters += `
+            <div class="prove-filters-checkbox" data-filter="${category.name}">
+                <input type="checkbox" class="checkbox" ${categoryStatus ? "checked" : ""} ${categoryStatus ? "active" : "disabled"}>
+                <label for="toggle" class="switch"></label>
+                <p class="prove-filters-text ${categoryStatus ? "active" : "disabled"}">${category.label}</p>
+            </div>`;
+    });
+    filters += `</div>`;
+    const $checkboxFilter = $(filters);
+    $filterContainer.append($checkboxFilter);
 
     const table = createTable();
     table.hide();
@@ -348,23 +351,22 @@ function createProveTables(data, $labelsParent) {
     const categoryData = [];
 
     categories.forEach((category) => {
-        const $categoryToggle = $(
-            `<button class="prove-category-toggle" data-category="${category.name}" style="display: none;">
-                ${category.label}
-            </button>`
-        );
         const transformedData = transformData(data[category.name]);
         categoryData.push(...transformedData);
         transformedData.forEach((element) => addRow(element, tbody));
-
-        $categoryToggle.css('background-color', category.color);
-        $buttonContainer.append($categoryToggle);   
-        $categoryToggle.click(function() {
-            $table.slideToggle();
-            $(this).toggleClass('active');
-        });
     });
 
+    $checkboxFilter.find(".prove-filters-checkbox").click(function() {
+        const filterBy = $(this).data('filter');
+        const checkbox = $(this).find("input");
+        if (checkbox.is(':disabled')) return;
+        checkbox.prop('checked', (i, val) => !val);
+        if (checkbox.is(":checked")) activeFilters.delete(filterBy);
+        else activeFilters.add(filterBy);
+        let filteredData = [...categoryData].filter((item) => !activeFilters.has(item.result));
+        tbody.empty();
+        filteredData.forEach((element) => addRow(element, tbody));
+    });
 
     table.find('th.sortable').click(function () {
         const sortBy = $(this).data('sort');
@@ -387,18 +389,18 @@ function createProveTables(data, $labelsParent) {
         if (isProveActive) {
             $('.prove-category-toggle').show().addClass('active');
             $statsContainer.slideDown();
+            $filterContainer.slideDown();
             $tablesContainer.slideDown();
             $tablesContainer.children().show();
         } else {
             $('.prove-category-toggle').hide().removeClass('active');
             $statsContainer.slideUp();
+            $filterContainer.slideUp();
             $tablesContainer.slideUp(function() {
                 $tablesContainer.children().hide();
             });
         }
     });
-
-    $labelsParent.prepend($container);
 }
 
 function transformData(categoryData) {
@@ -576,6 +578,22 @@ function addStyles() {
                 align-items: stretch; /* Ensure child elements match container width */
                 width: 100%; /* Matches the width of the table */
             }
+            #prove-filters {
+                display: flex;
+                align-items: center;
+            }
+            .prove-filters-checkbox {
+                display: flex;
+                align-items: center;
+                margin-left: 0.5rem;
+                cursor: pointer;
+            }
+            .prove-filters-text {
+                margin-left: 0.25rem !important;
+            }
+            .disabled {
+                color: #C6C6C6;
+            }
             #prove-buttons {
                 display: flex;
                 flex-wrap: nowrap;
@@ -613,10 +631,7 @@ function addStyles() {
                 box-sizing: border-box; /* Include padding and borders in width calculation */
             }
 			.prove-container {
-			    display: flex;
-			    align-items: center; /* Aligns button and health indicator */
-			    gap: 10px; /* Adds space between button and healthIndicator */
-			    margin-top: 20px; /* Moves the entire container upwards */
+                margin-bottom: 1rem;
 			}
 			.health-indicator {
 			    margin-top: 5px; /* Moves the health indicator slightly upward */
@@ -626,7 +641,7 @@ function addStyles() {
 			}
 			#prove-action-btn {
 			    margin-left: 10px;
-			    margin-top: -10px; 
+			    margin-top: 10px; 
 			    padding: 5px 10px;
 			    border: 1px solid #a2a9b1;
 			    border-radius: 5px;
@@ -731,6 +746,34 @@ function addStyles() {
                 background-color: ${colorMap["error"]};
             }
 
+            .switch { 
+                cursor: pointer;
+                position : relative ;
+                display : inline-block;
+                width : 2rem;
+                height : 1rem;
+                background-color: #eee;
+                border-radius: 20px;
+            }
+            .switch::after {
+                content: '';
+                position: absolute;
+                width: 0.95rem;
+                height: 0.95rem;
+                border-radius: 50%;
+                background-color: white;
+                transition: all 0.3s;
+            }
+            .checkbox:checked + .switch::after {
+                right: 0; 
+            }
+            .checkbox:checked + .switch {
+                background-color: #7983ff;
+            }
+            .checkbox { 
+                display : none;
+            }
+
 
             .hidden {
                 visibility: hidden;
@@ -793,6 +836,7 @@ function( mw, $ ) {
     function init() 
     {
         const totalStatements = calculateStatementStats().total;
+
         // Element into which to add the missing attributes
         var labelsParent = $('#wb-item-' + entityID + ' div.wikibase-entitytermsview-heading');
         if (labelsParent.length < 1) 
@@ -805,7 +849,6 @@ function( mw, $ ) {
     
         var $indicators = $('div.mw-indicators');
         var $proveContainer = $('<div class="prove-container"></div>');
-        $indicators.append($proveContainer);
         
         addStyles();
         
@@ -822,7 +865,6 @@ function( mw, $ ) {
             const status = flatdata.status;
             let statusText = '';
             let imageUrl = '';
-            // let showPrioritiseButton = false;
 
             if (status !== 'completed') {
                 if (status === 'in queue') {
@@ -831,7 +873,6 @@ function( mw, $ ) {
                 } else if (status === 'error' || status === 'Not processed yet') {
                     statusText = 'ProVe has not processed this item yet';
                     imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/warning.png';
-                    // showPrioritiseButton = true;
                 } else {
                     statusText = 'Status: ' + status;
                     imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/warning.png';
@@ -955,6 +996,7 @@ function( mw, $ ) {
                 // Append status indicator and button to container
                 $proveContainer.append($statusIndicator);
                 $proveContainer.append($button);
+                $indicators.append($proveContainer);
 
             } else {
                 // If status is complete, fetch ProVe data and initialize main functionality
@@ -966,8 +1008,10 @@ function( mw, $ ) {
                     return response.json();
                 })
                 .then(data => {
-                    updateProveHealthIndicator(data, entityID);
-                    createProveTables(data, labelsParent);
+                    const $container = $('<div id="prove-container"></div>');
+                    updateProveHealthIndicator(data, entityID, $container);
+                    createProveTables(data, $container);
+                    labelsParent.append($container);
                 })
                 .catch(error => {
                     console.error('Error fetching CompResult:', error);
