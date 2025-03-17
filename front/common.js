@@ -84,7 +84,7 @@ function displayStatementStats(data) {
     $statsContainer.append($statsDiv);
 
     if (stats.missing > 0) {
-        const $focusButton = $('<button>Click here to start adding references to statements with no references</button>').css({
+        const $focusButton = $('<button>Click here to add references to them</button>').css({
             'margin': '0.5rem',
             'padding': '5px 5px',
             'font-size': '12px',
