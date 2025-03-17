@@ -1,14 +1,21 @@
-/**
-* ==============================================================================
-* Start of ProVe Gadget Script
-* ==============================================================================
-*/
+const colorMap = {
+    "SUPPORTS": "#e6f3e6",
+    "REFUTES": "#f9e6e6",
+    "NOT ENOUGH INFO": "#fff9e6",
+    "error": "#e6e6f3"
+};
+const statusMapping = {
+    "SUPPORTS": "Supportive",
+    "REFUTES": "Refuting",
+    "NOT ENOUGH INFO": "Inconclusive",
+    "error": "Irretrievable"
+};
+const sortOrder = {};
+const activeFilters = new Set();
 
-/**
-* ProVe: UI extension for automated PROovenance VErification of knowledge graphs against textual sources
-* Developers  : Jongmo Kim (jongmo.kim@kcl.ac.uk), Yiwen Xing (yiwen.xing@kcl.ac.uk), Yihang Zhao (yihang.zhao@kcl.ac.uk), Odinaldo Rodrigues, Albert Merono Penuela, ...
-* Inspired by : Recoin: Relative Completeness Indicator (Vevake Balaraman, Simon Razniewski, and Albin Ahmeti), and COOL-WD: COmpleteness toOL for WikiData (Fariz Darari)
-*/
+function capitalizeFirstLetter(val) {
+    return String(val).charAt(0).toUpperCase() + String(val).slice(1).toLowerCase();
+}
 
 function loadentityselector(){
     try {
@@ -32,48 +39,53 @@ function calculateStatementStats() {
     };
 }
 
-function calculateTotalCount(data) {
-    if (!data) {
-        return 0;
-    }
-    const supportsCount = Object.values(data.SUPPORTS?.result || {}).length;
-    const refutesCount = Object.values(data.REFUTES?.result || {}).length;
-    const notEnoughInfoCount = Object.values(data['NOT ENOUGH INFO']?.result || {}).length;
-
-    return supportsCount + refutesCount + notEnoughInfoCount;
-}
-
 function displayStatementStats(data) {
     // Check if the data object is available
     if (!data) {
-        console.error('Data is missing, cannot display statement stats.');
         return;
     }
 
     // Calculate the statement statistics
     const stats = calculateStatementStats();
-    const totalCount = calculateTotalCount(data); // Use the data object here
+    let statementsHashmap = new Map();
+    for (entry of ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO", "error"]) {
+        if (entry in data) {
+            new Map(Object.entries(data[entry]?.property_id)).forEach((value) => {
+                const current = statementsHashmap.get(value) ? statementsHashmap.get(value) : 0;
+                statementsHashmap.set(value, 1 + current);
+            });
+        };
+    };
+    const externalReferences = statementsHashmap.values().reduce((sum, num) => sum + num);
 
-    console.log('Calculated stats:', stats);
 
     const $statsContainer = $('<div id="prove-stats"></div>').css({
         'margin-bottom': '10px',
 	    'font-weight': 'bold',
 	    'padding': '1px 8px',
-	    'box-sizing': 'border-box'
+	    'box-sizing': 'border-box',
+        'display': 'flex'
     });
 
-    let text = `This item has ${stats.total} statements. ${stats.total - stats.missing} of these statements (${(100 * (1 - stats.missing / stats.total)).toFixed(1)}%) have references, ${totalCount} of which are external.`;
+    let $statsDiv = $(`
+        <div>
+            This item has ${stats.total} statements. <br>
+            <ul>
+                <li>${stats.total - stats.missing - statementsHashmap.size} statements have internal references (not checked by ProVe).</li>
+                <li>${stats.missing} statements do not have references. <span id="statement-button"></span></li>
+                <li>
+                    ${statementsHashmap.size} statements have 
+                    ${externalReferences} 
+                    external references, with the following verification results:
+                </li>
+            </ul>
+        </div>`);
 
-    $statsContainer.text(text);
+    $statsContainer.append($statsDiv);
 
     if (stats.missing > 0) {
-        text += ` The remaining ${stats.missing} statements do not have references and need your support.`;
-        
-        $statsContainer.text(text);
-
-        const $focusButton = $('<button>Click here to start adding references to those statements</button>').css({
-            'margin-left': '10px',
+        const $focusButton = $('<button>Click here to add references to them</button>').css({
+            'margin': '0.5rem',
             'padding': '5px 5px',
             'font-size': '12px',
             'font-weight': 'bold',
@@ -94,62 +106,45 @@ function displayStatementStats(data) {
                 'transform': 'scale(1)'
             });
         }).click(function() {
-            console.log('Focus button clicked');
             const $firstMissing = $('.wikibase-statementview-references-heading .ui-toggler-label:contains("0 references")').first();
-            console.log('First missing reference statement found:', $firstMissing.length > 0);
 
             if ($firstMissing.length) {
                 $firstMissing[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                console.log('Scrolled to first missing reference statement');
                 const $addReferenceLink = $firstMissing.closest('.wikibase-statementview').find('.wikibase-statementview-references .wikibase-addtoolbar-container');
-                console.log('Add reference link found:', $addReferenceLink.length > 0);
 
                 if ($addReferenceLink.length) {
                     const originalBackgroundColor = $addReferenceLink.css('background-color');
                     const originalTransition = $addReferenceLink.css('transition');
 
-                    console.log('Original background color:', originalBackgroundColor);
-                    console.log('Original transition:', originalTransition);
-
                     $addReferenceLink.css({
                         'background-color': 'yellow',
                         'transition': 'background-color 0.5s ease-in-out'
                     });
-                    console.log('Applied yellow background to add reference link');
 
                     setTimeout(() => {
                         $addReferenceLink.css({
                             'background-color': originalBackgroundColor,
                             'transition': originalTransition
                         });
-                        console.log('Restored original styles after 4 seconds');
                     }, 4000);
                 } else {
-                    console.log('Add reference link not found');
                 }
             } else {
-                console.log('No statements missing references found');
                 alert('No statements missing references found.');
             }
         });
 
-        $statsContainer.append($focusButton);
+        $statsDiv.find("#statement-button").append($focusButton);
     }
 
     return $statsContainer;
 }
 
-function updateProveHealthIndicator(data, qid) {
-    console.log(data);
-    var $indicators = $('div.mw-indicators');
+function updateProveHealthIndicator(data, qid, container) {
     var healthValue = data.Reference_score;
     const totalStatements = calculateStatementStats().total;
 
-    var $proveContainer = $('<div class="prove-container"></div>').css({
-        'display': 'flex',
-        'align-items': 'center',
-        'margin-left': '10px'
-    });
+    var $proveContainer = $('<div class="prove-container"></div>')
 
     if (typeof healthValue === 'number') {
         healthValue = healthValue.toFixed(2);
@@ -172,14 +167,12 @@ function updateProveHealthIndicator(data, qid) {
     }
 
     var $healthIndicator = $('<span>').css({
-        'margin-left': '10px',
-        'top': '-5px',
         'cursor': 'pointer',
         'position': 'relative',
         'display': 'inline-flex',
         'align-items': 'center'
     });
-    $healthIndicator.append('Reference Score: ' + healthValue + ' ');
+    $healthIndicator.append('ProVe Score: ' + healthValue + ' ');
 
     if (imageUrl) {
         var $image = $('<img>')
@@ -194,32 +187,47 @@ function updateProveHealthIndicator(data, qid) {
         $healthIndicator.append($image);
     }
 
-	const algoVersion = data.algo_version; // Replace with actual version if available elsewhere
-	const currentDateTime = data.Requested_time.split('.')[0].replace('T', ' ');
-	
-	var totalCount = Object.values(data.SUPPORTS.result || {}).length +
-	                 Object.values(data.REFUTES.result || {}).length +
-	                 Object.values(data['NOT ENOUGH INFO'].result || {}).length;
+	const algoVersion = data.algo_version;
+	let currentDateTime = data.Requested_time.split('.')[0];
+    currentDateTime = new Date(currentDateTime);
+    currentDateTime = currentDateTime.toLocaleString('en-GB', { 
+        year: 'numeric', month: '2-digit', day: '2-digit', 
+        hour: '2-digit', minute: '2-digit', second: '2-digit', 
+        hour12: false 
+    });
 	
 	var supportsCount = Object.values(data.SUPPORTS.result || {}).length;
 	var refutesCount = Object.values(data.REFUTES.result || {}).length;
 	var notEnoughInfoCount = Object.values(data['NOT ENOUGH INFO'].result || {}).length;
+    var errors = Object.values(data['error'].result || {}).length;
+    var totalCount = supportsCount + refutesCount + notEnoughInfoCount + errors
 	
 	var hoverContent = `
 	    ProVe v${algoVersion}<br>
-	    Supports: ${supportsCount} (${(supportsCount / totalCount * 100).toFixed(1)}%)<br>
-	    Refutes: ${refutesCount} (${(refutesCount / totalCount * 100).toFixed(1)}%)<br>
-	    Not Enough Info: ${notEnoughInfoCount} (${(notEnoughInfoCount / totalCount * 100).toFixed(1)}%)<br>
-	    ${currentDateTime}
+	    Last updated on ${currentDateTime}<br>
+	    <span id="hover-non-authoritative" class="hover-item">
+            ${statusMapping["REFUTES"]}: ${refutesCount} (${(refutesCount / totalCount * 100).toFixed(1)}%)
+        </span>
+	    <span id="hover-irrelevant" class="hover-item">
+            ${statusMapping["NOT ENOUGH INFO"]}: ${notEnoughInfoCount} (${(notEnoughInfoCount / totalCount * 100).toFixed(1)}%)
+        </span>
+	    <span id="hover-support" class="hover-item">
+            ${statusMapping["SUPPORTS"]}: ${supportsCount} (${(supportsCount / totalCount * 100).toFixed(1)}%)
+        </span>
+        <span id="hover-irretrievable" class="hover-item">
+            ${statusMapping["error"]}: ${errors} (${(errors / totalCount * 100).toFixed(1)}%)
+        </span>
 	`;
 	
+    let hoverTimeout; // to let the user hover the hover content without disappearing. 
 	$healthIndicator.hover(
 	    function() {
+            clearTimeout(hoverTimeout);
 	        var $hoverBox = $('<div>')
 	            .html(hoverContent)
 	            .css({
 	                position: 'absolute',
-	                top: 'calc(100% + 5px)',  // Move it 5px below the indicator
+	                top: 'calc(100% + 5px)',
 	                left: '50%',
 	                transform: 'translateX(-50%)',
 	                backgroundColor: 'white',
@@ -228,23 +236,26 @@ function updateProveHealthIndicator(data, qid) {
 	                zIndex: 1000,
 	                whiteSpace: 'nowrap',
 	                fontSize: '0.9em',
-	                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'  // Add a subtle shadow
+	                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
 	            });
 	        $(this).append($hoverBox);
 	    },
 	    function() {
-	        $(this).find('div').remove();
+            const self = $(this);
+            hoverTimeout = setTimeout(function() {
+                self.find('div').remove();
+            }, 250);
 	    }
 	);
 	
 	var $proveLink = $('<a>')
-	    .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe')
+	    .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe#How_ProVe_Works')
 	    .attr('target', '_blank')
 	    .attr('title', 'Click to visit Wikidata:ProVe page')
 	    .append($healthIndicator);
 	
 	$proveContainer.append($proveLink);
-	$indicators.append($proveContainer);
+	container.append($proveContainer);
 
 
     // Add button logic
@@ -276,7 +287,6 @@ function updateProveHealthIndicator(data, qid) {
 	            return response.json();
 	        })
 	        .then(responseData => {
-	            console.log('API Response:', responseData);
 	            const estimatedComputationTimeMinutes = Math.ceil(totalStatements * 7.05 / 60);
 	
 	            let alertMessage;
@@ -302,37 +312,73 @@ function updateProveHealthIndicator(data, qid) {
 	$proveContainer.append($button);
 }
 
-function createProveTables(data, $labelsParent) {
-    const $container = $('<div id="prove-container"></div>');
+function createProveTables(data, container) {
     const $statsContainer = displayStatementStats(data).hide();
     const $buttonContainer = $('<div id="prove-buttons"></div>');
     const $toggleButton = $('<button id="prove-toggle">Show/Hide Reference Results</button>');
+    const $filterContainer = $('<div id="prove-filters" style="display: none;"></div>')
     const $tablesContainer = $('<div id="prove-tables" style="display: none;"></div>');
 
     $buttonContainer.append($toggleButton);
-    $container.append($buttonContainer).append($statsContainer).append($tablesContainer);
+    container.append($buttonContainer).append($statsContainer).append($filterContainer).append($tablesContainer);
 
     const categories = [
-        { name: "REFUTES", label: "Non-authoritative", color: "#f9e6e6" },
-        { name: "NOT ENOUGH INFO", label: "Potentially irrelevant", color: "#fff9e6" },
-        { name: "SUPPORTS", label: "Potentially supportive", color: "#e6f3e6" },
+        { name: "REFUTES", label: "Refuting", color: "#f9e6e6" },
+        { name: "NOT ENOUGH INFO", label: "Inconclusive", color: "#fff9e6" },
+        { name: "SUPPORTS", label: "Supportive", color: "#e6f3e6" },
         { name: "error", label: "Irretrievable", color: "#e6e6f3" }
     ];
-
-    categories.forEach(category => {
-        const $categoryToggle = $(`<button class="prove-category-toggle" data-category="${category.name}" style="display: none;">${category.label}</button>`);
-        $categoryToggle.css('background-color', category.color);
-        const $table = createTable(category.name, transformData(data[category.name]));
-        $table.hide();
-       
-        $buttonContainer.append($categoryToggle);
-        $tablesContainer.append($table);
-
-        $categoryToggle.click(function() {
-            $table.slideToggle();
-            $(this).toggleClass('active');
-        });
+    
+    let filters = '<p> Filters: </p>';
+    filters += '<div style="display: flex;">';
+    categories.forEach((category) => {
+        const categoryStatus = Object.values(data[category.name]?.qid || {}).length > 0;
+        filters += `
+            <div class="prove-filters-checkbox" data-filter="${category.name}">
+                <input type="checkbox" class="checkbox" ${categoryStatus ? "checked" : ""} ${categoryStatus ? "active" : "disabled"}>
+                <label for="toggle" class="switch"></label>
+                <p class="prove-filters-text ${categoryStatus ? "active" : "disabled"}">${category.label}</p>
+            </div>`;
     });
+    filters += `</div>`;
+    const $checkboxFilter = $(filters);
+    $filterContainer.append($checkboxFilter);
+
+    const table = createTable();
+    table.hide();
+    $tablesContainer.append(table);
+    const tbody = table.find('tbody');
+    const categoryData = [];
+
+    categories.forEach((category) => {
+        const transformedData = transformData(data[category.name]);
+        categoryData.push(...transformedData);
+        transformedData.forEach((element) => addRow(element, tbody));
+    });
+
+    $checkboxFilter.find(".prove-filters-checkbox").click(function() {
+        const filterBy = $(this).data('filter');
+        const checkbox = $(this).find("input");
+        if (checkbox.is(':disabled')) return;
+        checkbox.prop('checked', (i, val) => !val);
+        if (checkbox.is(":checked")) activeFilters.delete(filterBy);
+        else activeFilters.add(filterBy);
+        let filteredData = [...categoryData].filter((item) => !activeFilters.has(item.result));
+        tbody.empty();
+        filteredData.forEach((element) => addRow(element, tbody));
+    });
+
+    table.find('th.sortable').click(function () {
+        const sortBy = $(this).data('sort');
+        let sortedData = [...categoryData].sort((a, b) => (a[sortBy] || "").localeCompare(b[sortBy] || ""));;
+        if (!sortOrder[sortBy]) sortedData = sortedData.reverse();
+        sortOrder[sortBy] = !sortOrder[sortBy];
+        updateSortArrow(sortOrder[sortBy], sortBy);
+        tbody.empty();
+        sortedData.forEach((element) => addRow(element, tbody));
+    });
+    table.find('th[data-sort="result_status"]').click();
+
 
     let isProveActive = false;
 
@@ -343,23 +389,22 @@ function createProveTables(data, $labelsParent) {
         if (isProveActive) {
             $('.prove-category-toggle').show().addClass('active');
             $statsContainer.slideDown();
+            $filterContainer.slideDown();
             $tablesContainer.slideDown();
             $tablesContainer.children().show();
         } else {
             $('.prove-category-toggle').hide().removeClass('active');
             $statsContainer.slideUp();
+            $filterContainer.slideUp();
             $tablesContainer.slideUp(function() {
                 $tablesContainer.children().hide();
             });
         }
     });
-
-    $labelsParent.prepend($container);
 }
 
 function transformData(categoryData) {
     const result = [];
-    const length = categoryData.qid ? Object.keys(categoryData.qid).length : 0;
     const keys = Object.keys(categoryData.qid || {});
     keys.forEach(key => {
         result.push({
@@ -371,37 +416,43 @@ function transformData(categoryData) {
             url: categoryData.url[key] || '#'
         });
     });
-    
-    console.log('Transformed data:', result);  
+
     return result;
 }
 
-function createTable(title, data) {
-    const colorMap = {
-        "SUPPORTS": "#e6f3e6",
-        "REFUTES": "#f9e6e6",
-        "NOT ENOUGH INFO": "#fff9e6",
-        "error": "#e6e6f3"
-    };
-    const backgroundColor = colorMap[title] || "#f0f0f0";
+function updateSortArrow(sortOrder, sortBy) {
+    const $arrow = $(`th[data-sort="${sortBy}"] .sort-arrow`);
+    
+    $(`.sort-arrow`).each(function() {
+        if (!$(this).hasClass('hidden')) $(this).addClass('hidden');
+    });
 
-    const tbheaderMap = {
-        "SUPPORTS": "Sentence in external URL found to possibly support the triple",
-        "REFUTES": "Sentence in external URL to be checked, possibly not authoritative",
-        "NOT ENOUGH INFO": "Sentence in external URL to be checked, possibly not relevant",
-        "error": "Irretrievable external sources"
-    };
+    if (sortOrder) $arrow.removeClass('rotate-down').removeClass('hidden').addClass('rotate-up');
+    else $arrow.removeClass('rotate-up').removeClass('hidden').addClass('rotate-down');
+}
 
-    const resultHeader = tbheaderMap[title] || "ProVe Result Sentences";
-
+function createTable() {
     const $table = $(`
         <div class="expandable-table">
-            <table data-category="${title}">
+            <table>
                 <thead>
                     <tr>
-                        <th class="sortable" data-sort="triple">Triple</th>
-                        <th class="sortable" data-sort="result_sentence">${resultHeader}</th>
-                        <th>URL</th>
+                        <th class="sortable" data-sort="triple">
+                            Statements
+                            <span class="sort-arrow hidden"></span>
+                        </th>
+                        <th class="sortable" data-sort="result_sentence">
+                            Relevant sentence in reference/Status code
+                            <span class="sort-arrow hidden"></span>
+                        </th>
+                        <th class="sortable" data-sort="result_status">
+                            Support stance
+                            <span class="sort-arrow hidden"></span>
+                        </th>
+                        <th  class="sortable" data-sort="reference">
+                            Reference
+                            <span class="sort-arrow hidden"></span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -410,67 +461,51 @@ function createTable(title, data) {
         </div>
     `);
 
-    const $tbody = $table.find('tbody');
-
-    const addRow = (item) => {
-        // Adjust result_sentence for errors if needed
-        let resultSentence = item.result_sentence;
-        if (resultSentence === "Error: HTTP status code 403") {
-            resultSentence = "The document linked by this URL is restricted and cannot be accessed (Error 403: Access Denied)";
-        } else if (resultSentence === "Error: HTTP status code 404") {
-            resultSentence = "The document linked by this URL could not be found (Error 404: Not Found)";
-        }
-        
-        // Remove "Source language: (xx) / " or "Source language: (None) / " at the beginning
-	    const slashIndex = resultSentence.indexOf('/');
-	    if (slashIndex !== -1) {
-	        resultSentence = resultSentence.substring(slashIndex + 1).trim();
-	    }
-
-        const $row = $(`
-            <tr>
-                <td><a class="modify-btn">${item.triple}</a></td>
-                <td>${resultSentence}</td>
-                <td><a href="${item.url}" target="_blank">Link</a></td>
-            </tr>
-        `);
-
-        $row.find('.modify-btn').click(() => handleModify(item));
-        $row.find('.modify-btn').attr('title', 'Click to view triple and edit');
-
-        $tbody.append($row);
-    };
-
-    data.forEach(addRow);
-
-    // Add sorting functionality
-    $table.find('th.sortable').click(function () {
-        const sortBy = $(this).data('sort');
-        const sortedData = [...data].sort((a, b) => (a[sortBy] || "").localeCompare(b[sortBy] || ""));
-        $tbody.empty();
-        sortedData.forEach(addRow);
-    });
 
     return $table;
 }
 
-function handleModify(item) {
-    console.log('Modifying:', item.pid, item.url);
+function addRow(item, tbody) {
+    // Adjust result_sentence for errors if needed
+    let resultSentence = item.result_sentence;
+    if (resultSentence === "Error: HTTP status code 403") {
+        resultSentence = "The document linked by this URL is restricted and cannot be accessed (Error 403: Access Denied)";
+    } else if (resultSentence === "Error: HTTP status code 404") {
+        resultSentence = "The document linked by this URL could not be found (Error 404: Not Found)";
+    }
     
+    // Remove "Source language: (xx) / " or "Source language: (None) / " at the beginning
+    const slashIndex = resultSentence.indexOf('/');
+    if (slashIndex !== -1) {
+        resultSentence = resultSentence.substring(slashIndex + 1).trim();
+    }
+
+    const $row = $(`
+        <tr class="row-${item.result.toLowerCase().replace(/ /g, '-')}">
+            <td><a class="modify-btn">${item.triple}</a></td>
+            <td>${resultSentence}</td>
+            <td>${capitalizeFirstLetter(statusMapping[item.result])}</td>
+            <td><a href="${item.url}" target="_blank">${item.url}</a></td>
+        </tr>
+    `);
+
+    $row.find('.modify-btn').click(() => handleModify(item));
+    $row.find('.modify-btn').attr('title', 'Click to view triple and edit');
+    tbody.append($row);
+}
+
+function handleModify(item) {    
     var pidElement = document.querySelector(`a[title="Property:${item.pid}"]`);
     
     if (!pidElement) {
-        console.log(`Element with property ${item.pid} not found`);
         alert(`Property ${item.pid} not found on this page`);
         return;
     }
 
     pidElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    console.log('Scrolled to PID element');
 
     var statementGroupView = pidElement.closest('.wikibase-statementgroupview');
     if (!statementGroupView) {
-        console.log('Statement group view not found');
         return;
     }
 
@@ -478,7 +513,6 @@ function handleModify(item) {
     
     function processStatements(index) {
         if (index >= statementViews.length) {
-            console.log('URL not found in any statement');
             return;
         }
 
@@ -490,7 +524,6 @@ function handleModify(item) {
             var toggler = referencesHeading.querySelector('.ui-toggler');
             if (toggler) {
                 toggler.click();
-                console.log('Clicked toggler to expand references');
                 setTimeout(() => checkForUrl(statementView, index), 300);
             } else {
                 checkForUrl(statementView, index);
@@ -506,9 +539,7 @@ function handleModify(item) {
 		
 		if (previousEditLink) {
 		    highlightUrl(previousEditLink);
-		    console.log('Found the edit link:', previousEditLink);
 		} else {
-		    console.log('No edit link found.');
 		}
         
         if (urlElement) {
@@ -527,15 +558,10 @@ function handleModify(item) {
         urlElement.style.border = '1px solid #000';
         
         urlElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        console.log('Applied highlight style');
 
         setTimeout(() => {
             urlElement.setAttribute('style', originalStyle);
-            console.log('Restored original style');
         }, 3000);
-        
-        console.log(`Highlighted URL: ${item.url}`);
     }
 
     processStatements(0);
@@ -551,6 +577,22 @@ function addStyles() {
                 flex-direction: column;
                 align-items: stretch; /* Ensure child elements match container width */
                 width: 100%; /* Matches the width of the table */
+            }
+            #prove-filters {
+                display: flex;
+                align-items: center;
+            }
+            .prove-filters-checkbox {
+                display: flex;
+                align-items: center;
+                margin-left: 0.5rem;
+                cursor: pointer;
+            }
+            .prove-filters-text {
+                margin-left: 0.25rem !important;
+            }
+            .disabled {
+                color: #C6C6C6;
             }
             #prove-buttons {
                 display: flex;
@@ -589,10 +631,7 @@ function addStyles() {
                 box-sizing: border-box; /* Include padding and borders in width calculation */
             }
 			.prove-container {
-			    display: flex;
-			    align-items: center; /* Aligns button and health indicator */
-			    gap: 10px; /* Adds space between button and healthIndicator */
-			    margin-top: 20px; /* Moves the entire container upwards */
+                margin-bottom: 1rem;
 			}
 			.health-indicator {
 			    margin-top: 5px; /* Moves the health indicator slightly upward */
@@ -602,7 +641,7 @@ function addStyles() {
 			}
 			#prove-action-btn {
 			    margin-left: 10px;
-			    margin-top: -10px; 
+			    margin-top: 10px; 
 			    padding: 5px 10px;
 			    border: 1px solid #a2a9b1;
 			    border-radius: 5px;
@@ -633,13 +672,9 @@ function addStyles() {
                 text-align: left;
                 vertical-align: top;
             }
-            .expandable-table th.sortable {
-                padding: 15px;
-                cursor: pointer;
-                position: sticky;
-                top: 0;
+            .expandable-table th {
                 background-color: #f8f9fa;
-                min-height: 100px;
+                cursor: pointer;
             }
             .expandable-table th.sortable:hover {
                 opacity: 0.8;
@@ -648,7 +683,7 @@ function addStyles() {
                 width: 30%; /* Fixed width for the 'Triple' column */
             }
             .expandable-table th[data-sort="result_sentence"] {
-                width: 60%; /* Fixed width for the 'Result Sentence' column */
+                width: 40%; /* Fixed width for the 'Result Sentence' column */
             }
             .expandable-table th:last-child {
                 width: 10%; /* Fixed width for the 'URL' column */
@@ -656,18 +691,111 @@ function addStyles() {
             .expandable-table td {
                 word-break: break-word;
             }
+            .expandable-table td a {
+                width: 100%;
+                display: inline-block;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                vertical-align: middle;
+            }
+            .sort-arrow {
+                vertical-align: middle;
+                display: inline-block;
+                width: 0;
+                height: 0;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid black;
+                margin-left: 5px;
+                transition: transform 0.3s ease;
+            }
+
+            /* Rotate the arrow for descending (downward) sort order */
+            .rotate-down {
+                transform: rotate(180deg);
+            }
+
+            /* Rotate the arrow for ascending (upward) sort order */
+            .rotate-up {
+                transform: rotate(0deg);
+            }
             /* Background colors for categories */
             .expandable-table table[data-category="SUPPORTS"] th {
-                background-color: #e6f3e6;
+                background-color: ${colorMap["SUPPORTS"]};
             }
             .expandable-table table[data-category="REFUTES"] th {
-                background-color: #f9e6e6;
+                background-color: ${colorMap["REFUTES"]};
             }
             .expandable-table table[data-category="NOT ENOUGH INFO"] th {
-                background-color: #fff9e6;
+                background-color: ${colorMap["NOT ENOUGH INFO"]};
             }
             .expandable-table table[data-category="error"] th {
-                background-color: #e6e6f3;
+                background-color: ${colorMap["error"]};
+            }
+            .row-supports {
+                background-color: ${colorMap["SUPPORTS"]};
+            }
+            .row-refutes {
+                background-color: ${colorMap["REFUTES"]};
+            }
+            .row-not-enough-info {
+                background-color: ${colorMap["NOT ENOUGH INFO"]};
+            }
+            .row-error {
+                background-color: ${colorMap["error"]};
+            }
+
+            .switch { 
+                cursor: pointer;
+                position : relative ;
+                display : inline-block;
+                width : 2rem;
+                height : 1rem;
+                background-color: #eee;
+                border-radius: 20px;
+            }
+            .switch::after {
+                content: '';
+                position: absolute;
+                width: 0.95rem;
+                height: 0.95rem;
+                border-radius: 50%;
+                background-color: white;
+                transition: all 0.3s;
+            }
+            .checkbox:checked + .switch::after {
+                right: 0; 
+            }
+            .checkbox:checked + .switch {
+                background-color: #7983ff;
+            }
+            .checkbox { 
+                display : none;
+            }
+
+
+            .hidden {
+                visibility: hidden;
+            }
+            .hover-item {
+                width: 100%;
+                display: flex;
+            }
+            .hover-item:before {
+                content: "\\00a0";
+            }
+            #hover-support {
+                background-color: ${colorMap["SUPPORTS"]};
+            }
+            #hover-non-authoritative {
+                background-color: ${colorMap["REFUTES"]};
+            }
+            #hover-irrelevant {
+                background-color: ${colorMap["NOT ENOUGH INFO"]};
+            }
+            #hover-irretrievable {
+                background-color: ${colorMap["error"]};
             }
             /* Media Query for Smaller Screens */
             @media (max-width: 1000px) {
@@ -688,274 +816,224 @@ function addStyles() {
 //Initiate the plugin
 ( 
 function( mw, $ ) {
-'use strict';
-console.log('prove-plugin loaded');
-/**
- * Check if we're viewing an item
- */
-var entityID = mw.config.get( 'wbEntityId' );
-var lang = mw.config.get( 'wgUserLanguage' );
-var pageid = "48139757";
+    'use strict';
+    /**
+     * Check if we're viewing an item
+     */
+    var entityID = mw.config.get( 'wbEntityId' );
+    var lang = mw.config.get( 'wgUserLanguage' );
+    var pageid = "48139757";
 
-if ( !entityID ) 
-{
-    return;
-}
-/**
- * holds the DOM input element for the label
- */
-var labelsParent;
-
-function init() 
-{
-	const totalStatements = calculateStatementStats().total;
-    // Element into which to add the missing attributes
-    var labelsParent = $('#wb-item-' + entityID + ' div.wikibase-entitytermsview-heading');
-    if (labelsParent.length < 1) 
+    if ( !entityID ) 
     {
         return;
     }
-    var $link = $( '<a href="https://www.wikidata.org/wiki/Wikidata:ProVe">' );
-    var $img = $( '<img>' ).css('margin-bottom', '15px');
-    $link.append( $img ).prependTo( 'div.mw-indicators' );
-   
-    var $indicators = $('div.mw-indicators');
-    var $proveContainer = $('<div class="prove-container"></div>');
-    $indicators.append($proveContainer);
-    
-    addStyles();
-    
-    // Check item api status
-    fetch(`https://kclwqt.sites.er.kcl.ac.uk//api/items/checkItemStatus?qid=${entityID}`)
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log('Status API Response:', data);
-        const flatdata = Array.isArray(data) ? data[0] : data;
-        const status = flatdata.status;
-        console.log(status);
-        let statusText = '';
-        let imageUrl = '';
-        // let showPrioritiseButton = false;
+    /**
+     * holds the DOM input element for the label
+     */
+    var labelsParent;
 
-        if (status !== 'completed') {
-            if (status === 'in queue') {
-                statusText = 'ProVe is processing this item';
-                imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/pending.png';
-            } else if (status === 'error' || status === 'Not processed yet') {
-                statusText = 'ProVe has not processed this item yet';
-                imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/warning.png';
-                // showPrioritiseButton = true;
-            } else {
-                statusText = 'Status: ' + status;
-                imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/warning.png';
+    function init() 
+    {
+        const totalStatements = calculateStatementStats().total;
+
+        // Element into which to add the missing attributes
+        var labelsParent = $('#wb-item-' + entityID + ' div.wikibase-entitytermsview-heading');
+        if (labelsParent.length < 1) 
+        {
+            return;
+        }
+        var $link = $( '<a href="https://www.wikidata.org/wiki/Wikidata:ProVe">' );
+        var $img = $( '<img>' ).css('margin-bottom', '15px');
+        $link.append( $img ).prependTo( 'div.mw-indicators' );
+    
+        var $indicators = $('div.mw-indicators');
+        var $proveContainer = $('<div class="prove-container"></div>');
+        
+        addStyles();
+        
+        // Check item api status
+        fetch(`https://kclwqt.sites.er.kcl.ac.uk//api/items/checkItemStatus?qid=${entityID}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
             }
-            
-            // Create status indicator
-			var $statusIndicator = $('<a>')
-			    .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe')
-			    .attr('target', '_blank')
-			    .css({
-			    	'margin-top': '10px',
-			        'margin-left': '10px',
-			        'cursor': 'pointer',
-			        'position': 'relative',
-			        'display': 'inline-flex',
-			        'align-items': 'center',
-			        'text-decoration': 'none',
-			        'color': 'inherit'
-			    });
-			
-			// Add ProVe text
-			$statusIndicator.append($('<span>').text('ProVe'));
-			
-			// Add image if available
-			if (imageUrl) {
-			    var $image = $('<img>')
-			        .attr('src', imageUrl)
-			        .css({
-			            'vertical-align': 'middle',
-			            'margin-left': '5px',
-			            'width': '20px',  
-			            'height': 'auto'  
-			        });
-			    
-			    $statusIndicator.append($image);
-			}
-			
-			// Add hover functionality
-			$statusIndicator.hover(
-			    function() {
-			        var $hoverBox = $('<div>')
-			            .text(statusText)
-			            .css({
-			                position: 'absolute',
-			                top: 'calc(100% + 5px)',
-			                left: '50%',
-			                transform: 'translateX(-50%)',
-			                backgroundColor: 'white',
-			                border: '1px solid black',
-			                padding: '5px',
-			                zIndex: 1000,
-			                whiteSpace: 'nowrap',
-			                fontSize: '0.9em',
-			                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-			            });
-			        $(this).append($hoverBox);
-			    },
-			    function() {
-			        $(this).find('div').remove();
-			    }
-			);
-			
-			// Add status text to labelsParent
-			labelsParent.prepend($('<span>').text(statusText).css('margin-right', '10px'));
-			
-			// Append the combined element to mw-indicators
-			$('div.mw-indicators').append($statusIndicator);
-  
-   //         // Add button for all statuses
-   //         const $button = $('<button id="prove-action-btn"></button>');
-   //         const buttonText = (status === 'processing' || status === 'in queue') 
-			//     ? 'Fetch Results' 
-			//     : (status === 'error' || status === 'Not processed yet') 
-			//         ? 'Compute' 
-			//         : 'Recompute';
-			
-			// const hoverText = (status === 'processing' || status === 'in queue') 
-			//     ? 'Click to fetch results for this item' 
-			//     : (status === 'error' || status === 'Not processed yet') 
-			//         ? 'Click to compute ProVe data for this item' 
-			//         : 'Click to recompute ProVe data for this item';
+            return response.json();
+        })
+        .then(data => {
+            const flatdata = Array.isArray(data) ? data[0] : data;
+            const status = flatdata.status;
+            let statusText = '';
+            let imageUrl = '';
 
-   //         $button.text(buttonText).attr('title', hoverText);
-
-   //         $button.click(() => {
-   //             const apiUrl = `https://kclwqt.sites.er.kcl.ac.uk/api/requests/requestItem?qid=${entityID}`;
-
-   //             $button.prop('disabled', true).text('Processing...');
-                
-   //             fetch(apiUrl)
-   //                 .then(response => {
-   //                     if (!response.ok) {
-   //                         throw new Error('Network response was not ok');
-   //                     }
-   //                     return response.json();
-   //                 })
-   //                 .then(responseData => {
-   //                     console.log('API Response:', responseData);
-   //                     const estimatedComputationTimeMinutes = Math.ceil(totalStatements * 7.05 / 60);
-   //             		alert(`Your request for recomputation has been successfully queued. The estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores.`);
-   //                 })
-   //                 .catch(error => {
-   //                     console.error('Error:', error);
-   //                     alert(`Failed to ${buttonText.toLowerCase()} item. Please try again later.`);
-   //                 })
-   //                 .finally(() => {
-   //                     $button.prop('disabled', false).text(buttonText);
-   //                 });
-   //         });
-
-   //         //$('div.mw-indicators').append($button);
-   //         $proveContainer.append($statusIndicator);
-   //         $proveContainer.append($button);
-			// Add button for all statuses
-			const $button = $('<button id="prove-action-btn"></button>');
-			const buttonText = (status === 'processing' || status === 'in queue') 
-			    ? 'Fetch Results' 
-			    : (status === 'error' || status === 'Not processed yet') 
-			        ? 'Compute' 
-			        : 'Recompute';
-			
-			const hoverText = (status === 'processing' || status === 'in queue') 
-			    ? 'Click to fetch results for this item' 
-			    : (status === 'error' || status === 'Not processed yet') 
-			        ? 'Click to compute ProVe data for this item' 
-			        : 'Click to recompute ProVe data for this item';
-			
-			$button.text(buttonText).attr('title', hoverText);
-			
-			$button.click(() => {
-			    const apiUrl = `https://kclwqt.sites.er.kcl.ac.uk/api/requests/requestItem?qid=${entityID}`;
-			
-			    $button.prop('disabled', true).text('Processing...');
-			    
-			    fetch(apiUrl)
-			        .then(response => {
-			            if (!response.ok) {
-			                throw new Error('Network response was not ok');
-			            }
-			            return response.json();
-			        })
-			        .then(responseData => {
-			            console.log('API Response:', responseData);
-			            const estimatedComputationTimeMinutes = Math.ceil(totalStatements * 7.05 / 60);
-			
-			            // Custom alert messages for different button actions
-			            let alertMessage;
-			            if (buttonText === 'Compute') {
-			                alertMessage = `Your request for computation has been successfully queued. The estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
-			            } else if (buttonText === 'Recompute') {
-			                alertMessage = `Your request for recomputation has been successfully queued. The estimated recomputation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
-			            } else if (buttonText === 'Fetch Results') {
-			                alertMessage = `Your request for fetch has been successful. The updated estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
-			            }
-			
-			            alert(alertMessage);
-			        })
-			        .catch(error => {
-			            console.error('Error:', error);
-			            alert(`Failed to ${buttonText.toLowerCase()} item. Please try again later.`);
-			        })
-			        .finally(() => {
-			            $button.prop('disabled', false).text(buttonText);
-			        });
-			});
-			
-			// Append status indicator and button to container
-			$proveContainer.append($statusIndicator);
-			$proveContainer.append($button);
-
-        } else {
-            // If status is complete, fetch ProVe data and initialize main functionality
-            fetch(`https://kclwqt.sites.er.kcl.ac.uk/api/items/getCompResult?qid=${entityID}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
+            if (status !== 'completed') {
+                if (status === 'in queue') {
+                    statusText = 'ProVe is processing this item';
+                    imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/pending.png';
+                } else if (status === 'error' || status === 'Not processed yet') {
+                    statusText = 'ProVe has not processed this item yet';
+                    imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/warning.png';
+                } else {
+                    statusText = 'Status: ' + status;
+                    imageUrl = 'https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/warning.png';
                 }
-                return response.json();
-            })
-            .then(data => {
-                console.log('CompResult API Response:', data);
-                updateProveHealthIndicator(data, entityID);
-                createProveTables(data, labelsParent);
-            })
-            .catch(error => {
-                console.error('Error fetching CompResult:', error);
-                alert('An error occurred while fetching ProVe data. Please try again later.');
+                
+                // Create status indicator
+                var $statusIndicator = $('<a>')
+                    .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe')
+                    .attr('target', '_blank')
+                    .css({
+                        'margin-top': '10px',
+                        'margin-left': '10px',
+                        'cursor': 'pointer',
+                        'position': 'relative',
+                        'display': 'inline-flex',
+                        'align-items': 'center',
+                        'text-decoration': 'none',
+                        'color': 'inherit'
+                    });
+                
+                // Add ProVe text
+                $statusIndicator.append($('<span>').text('ProVe'));
+                
+                // Add image if available
+                if (imageUrl) {
+                    var $image = $('<img>')
+                        .attr('src', imageUrl)
+                        .css({
+                            'vertical-align': 'middle',
+                            'margin-left': '5px',
+                            'width': '20px',  
+                            'height': 'auto'  
+                        });
+                    
+                    $statusIndicator.append($image);
+                }
+                
+                // Add hover functionality
+                $statusIndicator.hover(
+                    function() {
+                        var $hoverBox = $('<div>')
+                            .text(statusText)
+                            .css({
+                                position: 'absolute',
+                                top: 'calc(100% + 5px)',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                backgroundColor: 'white',
+                                border: '1px solid black',
+                                padding: '5px',
+                                zIndex: 1000,
+                                whiteSpace: 'nowrap',
+                                fontSize: '0.9em',
+                                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                            });
+                        $(this).append($hoverBox);
+                    },
+                    function() {
+                        $(this).find('div').remove();
+                    }
+                );
+                
+                // Add status text to labelsParent
+                labelsParent.prepend($('<span>').text(statusText).css('margin-right', '10px'));
+                
+                // Append the combined element to mw-indicators
+                $('div.mw-indicators').append($statusIndicator);
+
+                // Add button for all statuses
+                const $button = $('<button id="prove-action-btn"></button>');
+                const buttonText = (status === 'processing' || status === 'in queue') 
+                    ? 'Fetch Results' 
+                    : (status === 'error' || status === 'Not processed yet') 
+                        ? 'Compute' 
+                        : 'Recompute';
+                
+                const hoverText = (status === 'processing' || status === 'in queue') 
+                    ? 'Click to fetch results for this item' 
+                    : (status === 'error' || status === 'Not processed yet') 
+                        ? 'Click to compute ProVe data for this item' 
+                        : 'Click to recompute ProVe data for this item';
+                
+                $button.text(buttonText).attr('title', hoverText);
+                
+                $button.click(() => {
+                    const apiUrl = `https://kclwqt.sites.er.kcl.ac.uk/api/requests/requestItem?qid=${entityID}`;
+                
+                    $button.prop('disabled', true).text('Processing...');
+                    
+                    fetch(apiUrl)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok');
+                            }
+                            return response.json();
+                        })
+                        .then(responseData => {
+                            const estimatedComputationTimeMinutes = Math.ceil(totalStatements * 7.05 / 60);
+                
+                            // Custom alert messages for different button actions
+                            let alertMessage;
+                            if (buttonText === 'Compute') {
+                                alertMessage = `Your request for computation has been successfully queued. The estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
+                            } else if (buttonText === 'Recompute') {
+                                alertMessage = `Your request for recomputation has been successfully queued. The estimated recomputation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
+                            } else if (buttonText === 'Fetch Results') {
+                                alertMessage = `Your request for fetch has been successful. The updated estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
+                            }
+                
+                            alert(alertMessage);
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert(`Failed to ${buttonText.toLowerCase()} item. Please try again later.`);
+                        })
+                        .finally(() => {
+                            $button.prop('disabled', false).text(buttonText);
+                        });
+                });
+                
+                // Append status indicator and button to container
+                $proveContainer.append($statusIndicator);
+                $proveContainer.append($button);
+                $indicators.append($proveContainer);
+
+            } else {
+                // If status is complete, fetch ProVe data and initialize main functionality
+                fetch(`https://kclwqt.sites.er.kcl.ac.uk/api/items/getCompResult?qid=${entityID}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const $container = $('<div id="prove-container"></div>');
+                    updateProveHealthIndicator(data, entityID, $container);
+                    createProveTables(data, $container);
+                    labelsParent.append($container);
+                })
+                .catch(error => {
+                    console.error('Error fetching CompResult:', error);
+                    alert('An error occurred while fetching ProVe data. Please try again later.');
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching item status:', error);
+            var $errorIndicator = $('<span>').text('Error checking ProVe status').css({
+                'margin-left': '10px',
+                'cursor': 'default',
+                'color': 'red'
             });
-        }
-    })
-    .catch(error => {
-        console.error('Error fetching item status:', error);
-        var $errorIndicator = $('<span>').text('Error checking ProVe status').css({
-            'margin-left': '10px',
-            'cursor': 'default',
-            'color': 'red'
+            $('div.mw-indicators').append($errorIndicator);
         });
-        $('div.mw-indicators').append($errorIndicator);
+    }
+
+
+    $( function () {
+        mw.hook( 'wikipage.content' ).add( init );
     });
-}
-
-
-$( function () {
-    // init();
-    mw.hook( 'wikipage.content' ).add( init );
-});
 
 } ( mediaWiki, jQuery) );
 
