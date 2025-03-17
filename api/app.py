@@ -4,9 +4,11 @@ from flask_cors import CORS
 from flasgger import Swagger, swag_from
 import pandas as pd
 import sys
-sys.path.append('/home/nathan/Documents/git/ProVe/')
-import functions
 import os, json
+
+sys.path.append('/home/ubuntu/RQV')
+import functions
+from custom_decorators import log_request
 
 
 app = Flask(__name__)
@@ -33,6 +35,7 @@ PATH = Path(__file__).parent.absolute()
 
 @app.route('/api/config', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/config.yml')
+@log_request
 def get_config():
     try:
         config_json = functions.get_config_as_json()
@@ -43,6 +46,7 @@ def get_config():
 
 @app.route('/api/items/getSimpleResult', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/items/getSimpleResult.yml')
+@log_request
 def getSimpleResult():
     target_id = request.args.get('qid')
     if target_id is None:
@@ -56,6 +60,7 @@ def getSimpleResult():
 
 @app.route('/api/items/checkItemStatus', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/items/checkItemStatus.yml')
+@log_request
 def CheckItemStatus():
     target_id = request.args.get('qid')
     if target_id is None:
@@ -69,17 +74,19 @@ def CheckItemStatus():
 
 @app.route('/api/items/getCompResult', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/items/comprehensiveResults.yml')
+@log_request
 def comprehensive_results():
     target_id = request.args.get('qid')
     try:
         item = functions.comprehensive_results(target_id)
         return item, 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"{type(e).__name__}: {str(e)}"}), 500
 
 
 @app.route('/api/task/checkQueue', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/task/checkQueue.yml')
+@log_request
 def checkQueue():
     item = functions.checkQueue()
     return jsonify(item), 200
@@ -87,6 +94,7 @@ def checkQueue():
 
 @app.route('/api/task/checkCompleted', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/task/checkCompleted.yml')
+@log_request
 def checkCompleted():
     items = functions.checkCompleted()
     # If items is a list and contains more than 1000 elements, only return the last 1000 elements.
@@ -97,6 +105,7 @@ def checkCompleted():
 
 @app.route('/api/task/checkErrors', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/task/checkErrors.yml')
+@log_request
 def checkErrors():
     item = functions.checkErrors()
     # If items is a list and contains more than 1000 elements, only return the last 1000 elements.
@@ -107,6 +116,7 @@ def checkErrors():
 
 @app.route('/api/requests/requestItem', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/requests/requestItem.yml')
+@log_request
 def requestItem():
     target_id = request.args.get('qid')
     username = request.args.get('username')
@@ -134,6 +144,7 @@ def requestItem():
 
 @app.route('/api/worklist/generationBasics', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/worklist/generationBasics.yml')
+@log_request
 def GenerationBasics():
     try:
         app.logger.info("GenerationBasics API called")
@@ -147,6 +158,7 @@ def GenerationBasics():
 
 @app.route('/page/worklist/generationBasics', methods=['GET'])
 @swag_from(f'{PATH}/docs/page/worklist/generationBasics.yml')
+@log_request
 def pageViewforWorklist():
     item = functions.generation_worklists()
     data = item
@@ -208,6 +220,7 @@ def pageViewforWorklist():
 
 @app.route('/page/worklist/pagePileList', methods=['GET'])
 @swag_from(f'{PATH}/docs/page/worklist/pagePileList.yml')
+@log_request
 def page_view_for_page_pile():
     # Call the function to generate worklist data
     item = functions.generation_worklist_pagePile()
@@ -274,6 +287,7 @@ def page_view_for_page_pile():
 
 @app.route('/page/plot', methods=['GET'])
 @swag_from(f'{PATH}/docs/page/plot.yml')
+@log_request
 def plotingPilot():
     item = functions.plot_status()
     return render_template_string(item)
