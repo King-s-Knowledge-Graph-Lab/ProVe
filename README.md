@@ -1,4 +1,4 @@
-# ProVe (Provenacne Verification for Wikidata claims)
+# ProVe (Provenance Verification for Wikidata claims)
 
 ## Overview
 ProVe is a system designed to automatically verify claims and references in Wikidata. It extracts claims from Wikidata entities, fetches the referenced URLs, processes the HTML content, and uses NLP models to determine whether the claims are supported by the referenced content.
