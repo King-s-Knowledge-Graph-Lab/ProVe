@@ -5,8 +5,8 @@ const colorMap = {
     "error": "#e6e6f3"
 };
 const statusMapping = {
-    "SUPPORTS": "Supports",
-    "REFUTES": "Refutes",
+    "SUPPORTS": "Supportive",
+    "REFUTES": "Refuting",
     "NOT ENOUGH INFO": "Inconclusive",
     "error": "Irretrievable"
 };
@@ -72,11 +72,11 @@ function displayStatementStats(data) {
             This item has ${stats.total} statements. <br>
             <ul>
                 <li>${stats.total - stats.missing - statementsHashmap.size} statements have internal references (not checked by ProVe).</li>
-                <li>${stats.missing} statements do not have references.</li>
+                <li>${stats.missing} statements do not have references. <span id="statement-button"></span></li>
                 <li>
                     ${statementsHashmap.size} statements have 
                     ${externalReferences} 
-                    external references, with the following verification results.
+                    external references, with the following verification results:
                 </li>
             </ul>
         </div>`);
@@ -134,7 +134,7 @@ function displayStatementStats(data) {
             }
         });
 
-        $statsDiv.append($focusButton);
+        $statsDiv.find("#statement-button").append($focusButton);
     }
 
     return $statsContainer;
@@ -206,16 +206,16 @@ function updateProveHealthIndicator(data, qid, container) {
 	    ProVe v${algoVersion}<br>
 	    Last updated on ${currentDateTime}<br>
 	    <span id="hover-non-authoritative" class="hover-item">
-            Non-authoritative: ${refutesCount} (${(refutesCount / totalCount * 100).toFixed(1)}%)
+            ${statusMapping["REFUTES"]}: ${refutesCount} (${(refutesCount / totalCount * 100).toFixed(1)}%)
         </span>
 	    <span id="hover-irrelevant" class="hover-item">
-            Irrelevant: ${notEnoughInfoCount} (${(notEnoughInfoCount / totalCount * 100).toFixed(1)}%)
+            ${statusMapping["NOT ENOUGH INFO"]}: ${notEnoughInfoCount} (${(notEnoughInfoCount / totalCount * 100).toFixed(1)}%)
         </span>
 	    <span id="hover-support" class="hover-item">
-            Supportive: ${supportsCount} (${(supportsCount / totalCount * 100).toFixed(1)}%)
+            ${statusMapping["SUPPORTS"]}: ${supportsCount} (${(supportsCount / totalCount * 100).toFixed(1)}%)
         </span>
         <span id="hover-irretrievable" class="hover-item">
-            Irretrievable: ${errors} (${(errors / totalCount * 100).toFixed(1)}%)
+            ${statusMapping["error"]}: ${errors} (${(errors / totalCount * 100).toFixed(1)}%)
         </span>
 	`;
 	
@@ -323,8 +323,8 @@ function createProveTables(data, container) {
     container.append($buttonContainer).append($statsContainer).append($filterContainer).append($tablesContainer);
 
     const categories = [
-        { name: "REFUTES", label: "Non-authoritative", color: "#f9e6e6" },
-        { name: "NOT ENOUGH INFO", label: "Irrelevant", color: "#fff9e6" },
+        { name: "REFUTES", label: "Refuting", color: "#f9e6e6" },
+        { name: "NOT ENOUGH INFO", label: "Inconclusive", color: "#fff9e6" },
         { name: "SUPPORTS", label: "Supportive", color: "#e6f3e6" },
         { name: "error", label: "Irretrievable", color: "#e6e6f3" }
     ];
@@ -442,11 +442,11 @@ function createTable() {
                             <span class="sort-arrow hidden"></span>
                         </th>
                         <th class="sortable" data-sort="result_sentence">
-                            Description
+                            Relevant sentence in reference/Status code
                             <span class="sort-arrow hidden"></span>
                         </th>
                         <th class="sortable" data-sort="result_status">
-                            Status code
+                            Support stance
                             <span class="sort-arrow hidden"></span>
                         </th>
                         <th  class="sortable" data-sort="reference">
