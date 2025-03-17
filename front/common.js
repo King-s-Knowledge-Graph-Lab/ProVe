@@ -50,13 +50,13 @@ function displayStatementStats(data) {
     let statementsHashmap = new Map();
     for (entry of ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO", "error"]) {
         if (entry in data) {
-            new Map(Object.entries(data[entry]?.property_id)).forEach((value) => {
+            new Map(Object.entries(data[entry]?.property_id || {})).forEach((value) => {
                 const current = statementsHashmap.get(value) ? statementsHashmap.get(value) : 0;
                 statementsHashmap.set(value, 1 + current);
             });
         };
     };
-    const externalReferences = statementsHashmap.values().reduce((sum, num) => sum + num);
+    const externalReferences = statementsHashmap.values().reduce((sum, num) => sum + num, 0);
 
 
     const $statsContainer = $('<div id="prove-stats"></div>').css({
