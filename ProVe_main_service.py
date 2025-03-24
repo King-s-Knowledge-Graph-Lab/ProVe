@@ -1,27 +1,26 @@
-import pandas as pd
-from SPARQLWrapper import SPARQLWrapper, JSON
 import random
 import datetime
 import time
-import uuid
-import yaml
 import schedule
-from pymongo import MongoClient
 from datetime import datetime
-import ProVe_main_process
 from threading import Lock
 import signal
 import sys
 import nltk
+
+import pandas as pd
+from pymongo import MongoClient
+from SPARQLWrapper import SPARQLWrapper, JSON
+import yaml
+
 from background_processing import process_top_viewed_items, process_pagepile_list, process_random_qid
-import logging
-from logging.handlers import RotatingFileHandler
+import ProVe_main_process
+from utils.logger import logger
 
 try:
     nltk.download('punkt_tab')
-    
 except Exception as e:
-    print(f"Error in NLTK download: {e}")
+    logger.error(f"Error downloading nltk data: {e}")
 
 
 class MongoDBHandler:
@@ -338,7 +337,7 @@ class ProVeService:
         self.setup_signal_handlers()
         
         # Schedule settings
-        schedule.every().day.at("02:00").do(self.run_top_viewed_items)  
+        schedule.every().day.at("02:00").do(self.run_top_viewed_items)
         schedule.every().saturday.at("03:00").do(self.run_pagepile_list)
 
     def _load_config(self, config_path):
@@ -495,7 +494,7 @@ class ProVeService:
 if __name__ == "__main__":
 
     #MongoDBHandler().reset_database() #reset database
-    service = ProVeService('config.yaml')
+    service = ProVeService('local.yaml')
     service.run()
 
     # Process entity
