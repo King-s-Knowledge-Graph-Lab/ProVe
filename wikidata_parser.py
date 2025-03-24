@@ -1,13 +1,12 @@
 from qwikidata.linked_data_interface import get_entity_dict_from_api
 import nltk
-import logging
 from typing import List, Dict, Any
-import sys, subprocess
 import yaml, json, ast
 import pandas as pd
 import requests
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from utils.logger import logger
+
 
 class Config:
     def __init__(self, config_path: str = 'config.yaml'):
@@ -26,6 +25,7 @@ class Config:
     def reset_database(self) -> bool:
         return self.config.get('parsing', {}).get('reset_database', False)
 
+
 class EntityProcessor:
     def process_entity(self, qid: str) -> Dict[str, pd.DataFrame]:
         """
@@ -42,7 +42,7 @@ class EntityProcessor:
         """
         entity = get_entity_dict_from_api(qid)
         if not entity:
-            logging.warning(f'Failed to fetch entity: {qid}')
+            logger.warning(f'Failed to fetch entity: {qid}')
             return {'claims': pd.DataFrame(), 'claims_refs': pd.DataFrame(), 'refs': pd.DataFrame()}
         
         claims_data = []
@@ -152,9 +152,9 @@ class PropertyFilter:
         df = df[~df['datavalue'].isin(['somevalue', 'novalue'])]
 
         # Log filtering results
-        logging.info(f"Total claims: {original_size}")
-        logging.info(f"Claims after filtering: {len(df)}")
-        logging.info(f"Percentage kept: {len(df)/original_size*100:.2f}%")
+        logger.info(f"Total claims: {original_size}")
+        logger.info(f"Claims after filtering: {len(df)}")
+        logger.info(f"Percentage kept: {len(df)/original_size*100:.2f}%")
 
         return df
 
@@ -192,18 +192,18 @@ class URLProcessor:
             
             results = response.json()
             if not results.get('results', {}).get('bindings'):
-                logging.warning(f"No formatter URL found for {property_id}")
+                logger.warning(f"No formatter URL found for {property_id}")
                 return 'no_formatter_url'
             return results['results']['bindings'][0]['formatter_url']['value']
             
         except requests.Timeout:
-            logging.error(f"Timeout while fetching formatter URL for {property_id}")
+            logger.error(f"Timeout while fetching formatter URL for {property_id}")
             return 'no_formatter_url'
         except requests.RequestException as e:
-            logging.error(f"Request error for {property_id}: {e}")
+            logger.error(f"Request error for {property_id}: {e}")
             return 'no_formatter_url'
         except Exception as e:
-            logging.error(f"Unexpected error for {property_id}: {e}")
+            logger.error(f"Unexpected error for {property_id}: {e}")
             return 'no_formatter_url'
 
     def process_urls(self, filtered_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -222,7 +222,7 @@ class URLProcessor:
             refs_df = filtered_data['refs']
             
             if claims_df.empty or refs_df.empty:
-                logging.info("No data to process")
+                logger.info("No data to process")
                 return pd.DataFrame()
 
             # Get references for filtered claims
@@ -230,7 +230,7 @@ class URLProcessor:
             valid_refs = claims_refs_df[claims_refs_df['claim_id'].isin(valid_claim_ids)]
             
             if valid_refs.empty:
-                logging.info("No valid references found")
+                logger.info("No valid references found")
                 return pd.DataFrame()
 
             # Process URLs from valid references
@@ -240,14 +240,14 @@ class URLProcessor:
             url_data = self._process_reference_urls(refs_df)
             
             if not url_data.empty:
-                logging.info(f"Processed {len(url_data)} URL references")
+                logger.info(f"Processed {len(url_data)} URL references")
             else:
-                logging.info("No valid URLs found")
+                logger.info("No valid URLs found")
 
             return url_data
 
         except Exception as e:
-            logging.error(f"Error in URL processing: {e}")
+            logger.error(f"Error in URL processing: {e}")
             raise
 
     def _process_reference_urls(self, refs_df: pd.DataFrame) -> pd.DataFrame:
@@ -357,7 +357,7 @@ class URLProcessor:
             return labels
             
         except Exception as e:
-            logging.error(f"Error fetching labels: {e}")
+            logger.error(f"Error fetching labels: {e}")
             return {}
 
 class WikidataParser:
@@ -381,7 +381,7 @@ class WikidataParser:
                 'url_references': 0
             }
             
-            logging.info(f"Starting to process entity: {qid}")
+            logger.info(f"Starting to process entity: {qid}")
             
             entity_data = self.entity_processor.process_entity(qid)
             total_claims = len(entity_data['claims'])
@@ -418,7 +418,7 @@ class WikidataParser:
             return result
             
         except Exception as e:
-            logging.error(f"Failed to process entity {qid}: {str(e)}", exc_info=True)
+            logger.error(f"Failed to process entity {qid}: {str(e)}", exc_info=True)
             raise
 
     # Add new method to access statistics

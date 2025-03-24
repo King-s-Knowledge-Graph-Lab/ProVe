@@ -1,4 +1,3 @@
-import logging
 from typing import Dict, Any, List
 import yaml
 import requests
@@ -8,9 +7,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import pandas as pd
 
+from utils.logger import logger
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, 'r') as file:
@@ -57,13 +55,13 @@ class HTMLFetcher:
             response.raise_for_status()
             return response.text
         except Exception as e:
-            logging.error(f"Error fetching {url}: {e}")
+            logger.error(f"Error fetching {url}: {e}")
             return f"Error: {str(e)}"
 
     def fetch_html_with_selenium(self, url: str) -> str:
         """Fetch HTML content using selenium"""
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
+        # chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         
@@ -74,7 +72,7 @@ class HTMLFetcher:
                 time.sleep(1)  # Short delay to ensure page loads
                 return driver.page_source
         except Exception as e:
-            logging.error(f"Selenium error for {url}: {e}")
+            logger.error(f"Selenium error for {url}: {e}")
             return f"Error: {str(e)}"
 
     def fetch_all_html(self, url_df: pd.DataFrame, parser_result: Dict) -> pd.DataFrame:
@@ -124,10 +122,10 @@ class HTMLFetcher:
                                 lang = meta_lang.get('content', '')
                         result_df.at[idx, 'lang'] = lang if lang else None
                     except Exception as e:
-                        logging.error(f"Error detecting language for {row['url']}: {e}")
+                        logger.error(f"Error detecting language for {row['url']}: {e}")
                         result_df.at[idx, 'lang'] = None
 
-                logging.info(f"Successfully fetched HTML for {row['url']} (Status: {status}, Time: {fetch_start_time})")
+                logger.info(f"Successfully fetched HTML for {row['url']} (Status: {status}, Time: {fetch_start_time})")
 
             except requests.exceptions.HTTPError as e:
                 status = e.response.status_code
@@ -135,21 +133,21 @@ class HTMLFetcher:
                 result_df.at[idx, 'status'] = status
                 result_df.at[idx, 'html'] = f"Error: HTTP {status} - {error_msg} - {str(e)}"
                 result_df.at[idx, 'lang'] = None
-                logging.error(f"HTTP error for {row['url']}: {status} ({error_msg})")
+                logger.error(f"HTTP error for {row['url']}: {status} ({error_msg})")
                 result_df.at[idx, 'fetch_timestamp'] = pd.Timestamp.now()
 
             except requests.exceptions.Timeout as e:
                 result_df.at[idx, 'status'] = 408
                 result_df.at[idx, 'html'] = f"Error: HTTP 408 - Request Timeout - {str(e)}"
                 result_df.at[idx, 'lang'] = None
-                logging.error(f"Timeout error for {row['url']}: {e}")
+                logger.error(f"Timeout error for {row['url']}: {e}")
                 result_df.at[idx, 'fetch_timestamp'] = pd.Timestamp.now()
 
             except Exception as e:
                 result_df.at[idx, 'status'] = 500
                 result_df.at[idx, 'html'] = f"Error: HTTP 500 - Internal Server Error - {str(e)}"
                 result_df.at[idx, 'lang'] = None
-                logging.error(f"Failed to fetch HTML for {row['url']}: {e}")
+                logger.error(f"Failed to fetch HTML for {row['url']}: {e}")
                 result_df.at[idx, 'fetch_timestamp'] = pd.Timestamp.now()
 
         # After fetching HTML, add metadata from parser_result
@@ -179,7 +177,7 @@ class HTMLFetcher:
                         # Time type handling
                         return value_dict['value']['time']
             except Exception as e:
-                logging.error(f"Error extracting object_id: {e}")
+                logger.error(f"Error extracting object_id: {e}")
                 return None
             return None
 
@@ -256,7 +254,7 @@ class HTMLFetcher:
             return labels
             
         except Exception as e:
-            logging.error(f"Error fetching labels: {e}")
+            logger.error(f"Error fetching labels: {e}")
             return {}
 
             

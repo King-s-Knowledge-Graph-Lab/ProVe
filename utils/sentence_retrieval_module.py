@@ -6,7 +6,7 @@ import torch
 from transformers import BertTokenizer
 
 from utils.sentence_retrieval_model import sentence_retrieval_model
-
+from utils.logger import logger
 
 THIS_DIR = pathlib.Path(__file__).parent.absolute()
 ARGS = {
@@ -20,7 +20,7 @@ ARGS = {
 }
 
 if not ARGS['cuda']:
-    print('CUDA NOT AVAILABLE')
+    logger.info('CUDA NOT AVAILABLE')
 
 
 def process_sent(sentence):

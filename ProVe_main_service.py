@@ -434,7 +434,7 @@ class ProVeService:
         for item in stuck_items:
             # Check the number of retries
             if item.get('retry_count', 0) < retry_limit:
-                logging.info(f"Retrying QID {item['qid']}...")
+                logger.info(f"Retrying QID {item['qid']}...")
                 # Increment the retry count
                 self.mongo_handler.status_collection.update_one(
                     {'_id': item['_id']},
