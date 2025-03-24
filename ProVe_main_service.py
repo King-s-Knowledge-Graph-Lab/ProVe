@@ -1,19 +1,23 @@
-import random
 import datetime
-import time
-import schedule
 from datetime import datetime
+import time
 from threading import Lock
+import random
 import signal
 import sys
-import nltk
 
+import nltk
 import pandas as pd
 from pymongo import MongoClient
+import schedule
 from SPARQLWrapper import SPARQLWrapper, JSON
 import yaml
 
-from background_processing import process_top_viewed_items, process_pagepile_list, process_random_qid
+from background_processing import (
+    process_top_viewed_items, 
+    process_pagepile_list,
+    process_random_qid
+)
 import ProVe_main_process
 from utils.logger import logger
 
