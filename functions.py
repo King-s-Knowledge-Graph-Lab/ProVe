@@ -1,23 +1,31 @@
-import sqlite3
-import pandas as pd
 from datetime import datetime
-import yaml
-import uuid
-from urllib.parse import urlparse
 import json
-import plotly.graph_objects as go
+import sqlite3
+from urllib.parse import urlparse
+import uuid
+
+import pandas as pd
 from plotly.subplots import make_subplots
-import plotly.io as pio
+from plotly import graph_objects as go
+from plotly import io as pio
+import yaml
+
 from ProVe_main_service import MongoDBHandler
+from utils.logger import logger
 
 mongo_handler = MongoDBHandler()
-# LLM_mongo_handler = LLM_MongoDBHandler()
 
 #Params.
 def load_config(config_path: str):
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
+    try:
+        with open(config_path, 'r') as file:
+            return yaml.safe_load(file)
+    except FileNotFoundError as e:
+        logger.error("Config file not found: %s", e)
+        return None
+
 config = load_config('config.yaml')
+logger.info("Config loaded successfully: %s", config)
 
 db_path = config['database']['result_db_for_API']
 algo_version = config['version']['algo_version']
