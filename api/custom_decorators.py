@@ -96,6 +96,7 @@ def log_usage_information(
             if ip:
                 try:
                     headers["location"] = get_ip_location(ip)
+                    headers["locations"]["hash"] = hash(ip)
                 except KeyError:
                     headers["X-Real-Ip"] = ip
                     logger.error(f"when retrieving location for {ip}")
