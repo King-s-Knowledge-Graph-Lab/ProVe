@@ -1,15 +1,15 @@
-from pymongo import MongoClient
 from datetime import datetime, timedelta
-import yaml
-import uuid
-import requests
-import logging
 import random
+import time
+import uuid
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import pandas as pd
+from pymongo import MongoClient
+import requests
+import yaml
 
-# Initialize MongoDB handler
+from utils.logger import logger
+
 
 class MongoDBHandler:
     def __init__(self, connection_string="mongodb://localhost:27017/", max_retries=3):
@@ -27,11 +27,12 @@ class MongoDBHandler:
                 self.entailment_collection = self.db['entailment_results']
                 self.stats_collection = self.db['parser_stats']
                 self.status_collection = self.db['status']
-                print("Successfully connected to MongoDB")
+                logger.info("Successfully connected to WikiData MongoDB")
                 return
             except Exception as e:
-                print(f"MongoDB connection attempt {attempt + 1} failed: {e}")
+                logger.error(f"MongoDB connection attempt {attempt + 1} failed: {e}")
                 if attempt == self.max_retries - 1:
+                    logger.error("Failed to connect to MongoDB after multiple attempts")
                     raise
                 time.sleep(5)  # Wait before retry
 
@@ -40,23 +41,23 @@ class MongoDBHandler:
         try:
             self.client.server_info()
         except:
-            print("MongoDB connection lost, attempting to reconnect...")
+            logger.info("MongoDB connection lost, attempting to reconnect...")
             self.connect()
 
     def save_html_content(self, html_df):
         """Save HTML content data with task_id"""
         try:
             if html_df.empty:
-                print("Warning: html_df is empty")
+                logger.warning("html_df is empty")
                 return
-                
-            print(f"Attempting to save {len(html_df)} HTML records")
+
+            logger.info(f"Attempting to save {len(html_df)} HTML records")
             records = html_df.to_dict('records')
             
             for record in records:
                 try:
                     if 'reference_id' not in record:
-                        print(f"Warning: record missing reference_id: {record}")
+                        logger.warning(f"Record missing reference_id: {record}")
                         continue
                     
                     # Convert pandas Timestamp to datetime
@@ -74,27 +75,29 @@ class MongoDBHandler:
                         {'$set': record},
                         upsert=True
                     )
-                    
-                    print(f"Updated HTML document with reference_id {record['reference_id']}: "
-                          f"matched={result.matched_count}, modified={result.modified_count}, "
-                          f"upserted_id={result.upserted_id}")
+
+                    logger.info(
+                        f"Updated HTML document with reference_id {record['reference_id']}: "
+                        f"matched={result.matched_count}, modified={result.modified_count}, "
+                        f"upserted_id={result.upserted_id}"
+                    )
                           
                 except Exception as e:
-                    print(f"Error saving HTML record: {record}")
-                    print(f"Error details: {e}")
+                    logger.error(f"Error saving HTML record: {record}")
+                    logger.error(f"Error details: {e}")
                     
         except Exception as e:
-            print(f"Error in save_html_content: {e}")
+            logger.error(f"Error in save_html_content: {e}")
             raise
 
     def save_entailment_results(self, entailment_df):
         """Save entailment results with task_id"""
         try:
             if entailment_df.empty:
-                print("Warning: entailment_df is empty")
+                logger.warning("entailment_df is empty")
                 return
-            
-            print(f"Attempting to save {len(entailment_df)} entailment records")
+
+            logger.info(f"Attempting to save {len(entailment_df)} entailment records")
             records = entailment_df.to_dict('records')
             
             for record in records:
@@ -111,16 +114,17 @@ class MongoDBHandler:
                     
                     # Insert new document without checking for duplicates
                     result = self.entailment_collection.insert_one(record)
-                    
-                    print(f"Inserted new entailment document with reference_id {record['reference_id']}: "
-                          f"inserted_id={result.inserted_id}")
-                    
+                    logger.info(
+                        f"Inserted new entailment document with reference_id {record['reference_id']}: "
+                        f"inserted_id={result.inserted_id}"
+                    )
+
                 except Exception as e:
-                    print(f"Error saving entailment record: {record}")
-                    print(f"Error details: {e}")
+                    logger.error(f"Error saving entailment record: {record}")
+                    logger.error(f"Error details: {e}")
                     
         except Exception as e:
-            print(f"Error in save_entailment_results: {e}")
+            logger.error(f"Error in save_entailment_results: {e}")
             raise
 
     def save_parser_stats(self, stats_dict):
@@ -141,11 +145,10 @@ class MongoDBHandler:
                 {'$set': stats_dict},
                 upsert=True
             )
-            
-            print(f"Updated parser stats for entity {stats_dict['entity_id']}")
-            
+
+            logger.info(f"Updated parser stats for entity {stats_dict['entity_id']}")
         except Exception as e:
-            print(f"Error in save_parser_stats: {e}")
+            logger.error(f"Error in save_parser_stats: {e}")
             raise
 
     def save_status(self, status_dict):
@@ -185,16 +188,20 @@ class MongoDBHandler:
                     },
                     {'$set': status_dict}
                 )
-                print(f"Updated status for task {status_dict['task_id']}: "
-                      f"matched={result.matched_count}, modified={result.modified_count}")
+                logger.info(
+                    f"Updated status for task {status_dict['task_id']}: "
+                    f"matched={result.matched_count}, modified={result.modified_count}"
+                )
             else:
                 # Insert new document
                 result = self.status_collection.insert_one(status_dict)
-                print(f"Created new status for task {status_dict['task_id']}: "
-                      f"inserted_id={result.inserted_id}")
+                logger.info(
+                    f"Created new status for task {status_dict['task_id']}: "
+                    f"inserted_id={result.inserted_id}"
+                )
             
         except Exception as e:
-            print(f"Error in save_status: {e}")
+            logger.error(f"Error in save_status: {e}")
             raise
 
     def reset_database(self):
@@ -206,10 +213,10 @@ class MongoDBHandler:
             self.stats_collection.drop()
             self.status_collection.drop()
             
-            print("All collections have been reset successfully")
+            logger.info("All collections have been reset successfully")
             
         except Exception as e:
-            print(f"Error resetting database: {e}")
+            logger.error(f"Error resetting database: {e}")
             raise
 
     def get_next_user_request(self):
@@ -247,7 +254,7 @@ class MongoDBHandler:
             return None
             
         except Exception as e:
-            print(f"Error getting next user request: {e}")
+            logger.error(f"Error getting next user request: {e}")
             return None
 
 # Load config
@@ -323,7 +330,7 @@ def fetch_qid_by_label(label):
             return results[0]["item"]["value"].split("/")[-1]  # Extract QID from URI
         return None  # No QID found
     else:
-        print(f"Error {response.status_code}: {response.text}")
+        logger.error(f"Error fetching QID for label {label}: {response.text}")
         return None
 
 def fetch_top_pageviews_and_qid(project, access, year, month, day, limit=10):
@@ -359,12 +366,12 @@ def fetch_top_pageviews_and_qid(project, access, year, month, day, limit=10):
             
             # Exclude specific titles
             if title in ["Main Page", "Special:Search"]:
-                print(f"Excluding title: {title}")
+                logger.info(f"Excluding title: {title}")
                 continue
             
             # Debugging output
             if qid is None:
-                print(f"QID not found for title: {title}")
+                logger.info(f"QID not found for title: {title}")
             
             top_articles.append((title, views, qid))
             
@@ -374,7 +381,7 @@ def fetch_top_pageviews_and_qid(project, access, year, month, day, limit=10):
         
         return top_articles
     else:
-        print(f"Error {response.status_code}: {response.text}")
+        logger.error(f"Error fetching top pageviews: {response.text}")
         return None
 
 def process_top_viewed_items(project="en.wikipedia", access="all-access", limit=5):
@@ -396,16 +403,16 @@ def process_top_viewed_items(project="en.wikipedia", access="all-access", limit=
     top_items = fetch_top_pageviews_and_qid(project, access, year, month, day, limit)
 
     if top_items:
-        print("\nTop viewed items from yesterday:")
+        logger.info("Top viewed items from yesterday:")
         for idx, (title, views, qid) in enumerate(top_items, 1):
-            print(f"{idx}. Title: {title} - {views} views (QID: {qid})")
+            logger.info(f"{idx}. Title: {title} - {views} views (QID: {qid})")
             
             # Queue each item for processing
             if qid:  # Only queue if QID is found
                 result = requestItemProcessing(qid, 'top_viewed')
-                print(f"   Queue status: {result}")
+                logger.info(f"   Queue status: {result}")
     else:
-        print("No articles found.")
+        logger.info("No articles found.")
 
 def process_pagepile_list(file_path='utils/pagepileList.txt'):
     """
@@ -421,7 +428,7 @@ def process_pagepile_list(file_path='utils/pagepileList.txt'):
         for qid in qids:
             if qid:  # Ensure the QID is not empty
                 result = requestItemProcessing(qid, 'pagepile_weekly_update')
-                print(f"Queued QID {qid} for processing: {result}")
+                logger.info(f"Queued QID {qid} for processing: {result}")
     except Exception as e:
         logger.error(f"Error processing pagepile list: {e}")
 
@@ -434,7 +441,7 @@ def process_random_qid():
     
     # Queue the random QID for processing
     result = requestItemProcessing(random_qid, 'Random_processing')
-    print(f"Queued random QID {random_qid} for processing: {result}")
+    logger.info(f"Queued random QID {random_qid} for processing: {result}")
 
 if __name__ == "__main__":
     # Uncomment the desired function to run

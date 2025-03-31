@@ -1,28 +1,40 @@
-import sqlite3
-import pandas as pd
 from datetime import datetime
-import yaml
-import uuid
-from urllib.parse import urlparse
 import json
-import plotly.graph_objects as go
+import sqlite3
+from urllib.parse import urlparse
+import uuid
+
+import pandas as pd
 from plotly.subplots import make_subplots
-import plotly.io as pio
+from plotly import graph_objects as go
+from plotly import io as pio
+import yaml
+
 from ProVe_main_service import MongoDBHandler
+from utils.logger import logger
 
 mongo_handler = MongoDBHandler()
-# LLM_mongo_handler = LLM_MongoDBHandler()
 
-#Params.
+# Params
 def load_config(config_path: str):
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
+    try:
+        with open(config_path, 'r') as file:
+            return yaml.safe_load(file)
+    except FileNotFoundError as e:
+        logger.error("Config file not found: %s", e)
+        return None
+
 config = load_config('config.yaml')
+logger.info("Config loaded successfully: %s", config)
 
 db_path = config['database']['result_db_for_API']
-algo_version = config['version']['algo_version']
+logger.info("Database path: %s", db_path)
 
-#Table summary
+algo_version = config['version']['algo_version']
+logger.info("Algorithm version: %s", algo_version)
+
+
+# Table summary
 def get_all_tables_and_schemas(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -48,24 +60,26 @@ def print_schemas(table_schemas):
             print(f"  Name: {column[1]}, Type: {column[2]}, NotNull: {column[3]}, DefaultVal: {column[4]}, PK: {column[5]}")
 
 table_schemas = get_all_tables_and_schemas(db_path)
+logger.info("Table schemas: %s", table_schemas)
 
 
 #Utils
 def get_filtered_data(db_path, table_name, column_name, filter_value):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     cursor.execute(f"PRAGMA table_info({table_name})")
     columns = [col[1] for col in cursor.fetchall()]
-    
+
     query = f"SELECT * FROM {table_name} WHERE {column_name} = ?"
     cursor.execute(query, (filter_value,))
     results = cursor.fetchall()
-    
+
     conn.close()
-    
+
     data = [dict(zip(columns, row)) for row in results]
     return data
+
 
 def get_full_data(db_path, table_name):
     conn = sqlite3.connect(db_path)
@@ -164,14 +178,13 @@ def GetItem(target_id):
                 if isinstance(mongo_status['requested_timestamp'], datetime)
                 else mongo_status['requested_timestamp']
             }
-            
+
             return [formatted_status] + result_items
-            
+
         # If not found in MongoDB, fallback to SQLite
         return get_item_from_sqlite(target_id)
-        
     except Exception as e:
-        print(f"Error in GetItem: {e}")
+        logger.error("Error in GetItem: %s", e)
         return [{'error': f'Error retrieving data: {str(e)}'}]
 
 def get_item_from_sqlite(target_id):
@@ -214,9 +227,9 @@ def CheckItemStatus(target_id):
                 for ts in timestamps:
                     if isinstance(ts, str):
                         try:
-                            ts = datetime.fromisoformat(ts)  # 문자열을 datetime으로 변환
-                        except ValueError:
-                            continue  # 변환할 수 없는 경우 무시
+                            ts = datetime.fromisoformat(ts)  # Convert string to datetime
+                        except ValueError as e:
+                            logger.error("Error converting timestamp: %s", e)  # Ignore if unable to convert
                     if ts is not None:
                         valid_timestamps.append(ts)
                 return max(valid_timestamps) if valid_timestamps else datetime.min
@@ -238,7 +251,7 @@ def CheckItemStatus(target_id):
         return {'qid': target_id, 'status': 'Not processed yet'}
         
     except Exception as e:
-        print(f"Error in CheckItemStatus: {e}")
+        logger.error("Error in CheckItemStatus: %s", e)
         return {'qid': target_id, 'status': 'Error checking status'}
     
 #1.2. calculate the reference score for an item
@@ -379,6 +392,7 @@ def requestItemProcessing(qid):
         return f"Task {status_dict['task_id']} created for QID {qid}"
         
     except Exception as e:
+        logger.error("Error in requestItemProcessing: %s", e)
         return f"An error occurred: {e}"
 
 #5. Generation worklist
@@ -418,7 +432,6 @@ def dataframe_to_json(df):
 def generation_worklists():
     full_df = pd.DataFrame(get_full_data(db_path, 'aggregated_results')).set_index('id')
     latest_entries = finding_latest_entries(full_df)
-    print(latest_entries['url'])
     latest_entries['url_domain'] = latest_entries['url'].apply(extract_domain)
     url = "https://quarry.wmcloud.org/run/888614/output/0/csv"
     df = pd.read_csv(url)
@@ -522,8 +535,12 @@ def get_config_as_json():
     Returns:
         str: JSON string representation of the config.yaml contents
     """
-    config = load_config('config.yaml')
-    return json.dumps(config, indent=2)
+    try:
+        config = load_config('config.yaml')
+        return json.dumps(config, indent=2)
+    except FileNotFoundError as e:
+        logger.error("Config file not found: %s", e)
+        return None
 
 
 if __name__ == "__main__":

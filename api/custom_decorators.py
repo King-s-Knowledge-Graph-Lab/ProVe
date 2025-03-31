@@ -8,7 +8,9 @@ import sys
 
 from pymongo import MongoClient
 
-sys.path.append('/home/ubuntu/RQV')
+from .utils import get_ip_location, logger, CODE_PATH
+
+sys.path.append(CODE_PATH)
 from ProVe_main_service import MongoDBHandler
 
 
@@ -88,6 +90,20 @@ def log_usage_information(
 ) -> None:
     try:
         with StatsDBHandler() as db:
+            ip = headers.pop("X-Real-Ip", None)
+            headers.pop("X-Forwarded-For", None)
+
+            if ip:
+                try:
+                    headers["location"] = get_ip_location(ip)
+                    headers["locations"]["hash"] = hash(ip)
+                except KeyError:
+                    headers["X-Real-Ip"] = ip
+                    logger.error(f"when retrieving location for {ip}")
+                except ConnectionError:
+                    headers["X-Real-Ip"] = ip
+                    logger.error("failed to retrieve location, check API")
+
             db.usage_collection.insert_one({
                 "method": method,
                 "url": url,

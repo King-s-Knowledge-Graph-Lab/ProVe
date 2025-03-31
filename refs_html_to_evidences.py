@@ -1,18 +1,19 @@
 import pandas as pd
 import nltk
 import html2text
-import logging
 import requests
 from typing import Dict, List, Tuple, Optional
 from utils.verbalisation_module import VerbModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 import numpy as np
 
+from utils.logger import logger
+
 
 class HTMLSentenceProcessor:
     def __init__(self):
         nltk.download('punkt', quiet=True)
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         self.h = html2text.HTML2Text()
         self.h.ignore_links = True
 
@@ -35,7 +36,7 @@ class HTMLSentenceProcessor:
                 return [" ".join(sentences[i:i + window_size]) for i in range(len(sentences) - window_size + 1)]
             except:
                 return ["Error processing content"]
-        
+
         # Convert HTML to text using html2text
         valid_html_df['html2text'] = valid_html_df['html'].apply(lambda x: self.h.handle(x))
 
@@ -47,7 +48,7 @@ class HTMLSentenceProcessor:
 
 class EvidenceSelector:
     def __init__(self, sentence_retrieval=None, verb_module=None):
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         self.endpoint_url = "https://query.wikidata.org/sparql"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (compatible; MyBot/1.0; mailto:your@email.com)'

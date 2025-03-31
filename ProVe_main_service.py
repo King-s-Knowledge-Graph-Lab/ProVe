@@ -1,27 +1,30 @@
-import pandas as pd
-from SPARQLWrapper import SPARQLWrapper, JSON
-import random
 import datetime
-import time
-import uuid
-import yaml
-import schedule
-from pymongo import MongoClient
 from datetime import datetime
-import ProVe_main_process
+import time
 from threading import Lock
+import random
 import signal
 import sys
+
 import nltk
-from background_processing import process_top_viewed_items, process_pagepile_list, process_random_qid
-import logging
-from logging.handlers import RotatingFileHandler
+import pandas as pd
+from pymongo import MongoClient
+import schedule
+from SPARQLWrapper import SPARQLWrapper, JSON
+import yaml
+
+from background_processing import (
+    process_top_viewed_items, 
+    process_pagepile_list,
+    process_random_qid
+)
+import ProVe_main_process
+from utils.logger import logger
 
 try:
     nltk.download('punkt_tab')
-    
 except Exception as e:
-    print(f"Error in NLTK download: {e}")
+    logger.error(f"Error downloading nltk data: {e}")
 
 
 class MongoDBHandler:
@@ -40,11 +43,12 @@ class MongoDBHandler:
                 self.entailment_collection = self.db['entailment_results']
                 self.stats_collection = self.db['parser_stats']
                 self.status_collection = self.db['status']
-                print("Successfully connected to MongoDB")
+                logger.info("Successfully connected to WikiData verification MongoDB")
                 return
             except Exception as e:
-                print(f"MongoDB connection attempt {attempt + 1} failed: {e}")
+                logger.error(f"MongoDB connection attempt {attempt + 1} failed: {e}")
                 if attempt == self.max_retries - 1:
+                    logger.error("Failed to connect to MongoDB")
                     raise
                 time.sleep(5)  # Wait before retry
 
@@ -53,26 +57,26 @@ class MongoDBHandler:
         try:
             self.client.server_info()
         except:
-            print("MongoDB connection lost, attempting to reconnect...")
+            logger.error("MongoDB connection lost, attempting to reconnect...")
             self.connect()
 
     def save_html_content(self, html_df):
         """Save HTML content data with task_id"""
         try:
             if html_df.empty:
-                print("Warning: html_df is empty")
+                logger.warning("html_df is empty")
                 return
-                
+
             # Remvoing html data for storage efficiency 
             html_df_without_html = html_df.drop('html', axis=1)
-            
-            print(f"Attempting to save {len(html_df_without_html)} HTML records")
+
+            logger.info(f"Attempting to save {len(html_df_without_html)} HTML records")
             records = html_df_without_html.to_dict('records')
             
             for record in records:
                 try:
                     if 'reference_id' not in record:
-                        print(f"Warning: record missing reference_id: {record}")
+                        logger.warning(f"Record missing reference_id: {record}")
                         continue
                     
                     # Convert pandas Timestamp to datetime
@@ -90,27 +94,29 @@ class MongoDBHandler:
                         {'$set': record},
                         upsert=True
                     )
-                    
-                    print(f"Updated HTML document with reference_id {record['reference_id']}: "
-                          f"matched={result.matched_count}, modified={result.modified_count}, "
-                          f"upserted_id={result.upserted_id}")
+
+                    logger.info(
+                        f"Updated HTML document with reference_id {record['reference_id']}: "
+                        f"matched={result.matched_count}, modified={result.modified_count}, "
+                        f"upserted_id={result.upserted_id}"
+                    )
                           
                 except Exception as e:
-                    print(f"Error saving HTML record: {record}")
-                    print(f"Error details: {e}")
+                    logger.error(f"Error saving HTML record: {record}")
+                    logger.error(f"Error details: {e}")
                     
         except Exception as e:
-            print(f"Error in save_html_content: {e}")
+            logger.error(f"Error in save_html_content: {e}")
             raise
 
     def save_entailment_results(self, entailment_df):
         """Save entailment results with task_id"""
         try:
             if entailment_df.empty:
-                print("Warning: entailment_df is empty")
+                logger.warning("entailment_df is empty")
                 return
-            
-            print(f"Attempting to save {len(entailment_df)} entailment records")
+
+            logger.info(f"Attempting to save {len(entailment_df)} entailment records")
             records = entailment_df.to_dict('records')
             
             for record in records:
@@ -127,16 +133,17 @@ class MongoDBHandler:
                     
                     # Insert new document without checking for duplicates
                     result = self.entailment_collection.insert_one(record)
-                    
-                    print(f"Inserted new entailment document with reference_id {record['reference_id']}: "
-                          f"inserted_id={result.inserted_id}")
+                    logger.info(
+                        f"Inserted new entailment document with reference_id {record['reference_id']}: "
+                        f"inserted_id={result.inserted_id}"
+                    )
                     
                 except Exception as e:
-                    print(f"Error saving entailment record: {record}")
-                    print(f"Error details: {e}")
+                    logger.error(f"Error saving entailment record: {record}")
+                    logger.error(f"Error details: {e}")
                     
         except Exception as e:
-            print(f"Error in save_entailment_results: {e}")
+            logger.error(f"Error in save_entailment_results: {e}")
             raise
 
     def save_parser_stats(self, stats_dict):
@@ -157,11 +164,11 @@ class MongoDBHandler:
                 {'$set': stats_dict},
                 upsert=True
             )
-            
-            print(f"Updated parser stats for entity {stats_dict['entity_id']}")
+
+            logger.info(f"Updated parser stats for entity {stats_dict['entity_id']}")
             
         except Exception as e:
-            print(f"Error in save_parser_stats: {e}")
+            logger.error(f"Error in save_parser_stats: {e}")
             raise
 
     def save_status(self, status_dict):
@@ -201,31 +208,34 @@ class MongoDBHandler:
                     },
                     {'$set': status_dict}
                 )
-                print(f"Updated status for task {status_dict['task_id']}: "
-                      f"matched={result.matched_count}, modified={result.modified_count}")
+                logger.info(
+                    f"Updated status for task {status_dict['task_id']}: "
+                    f"matched={result.matched_count}, modified={result.modified_count}"
+                )
             else:
                 # Insert new document
                 result = self.status_collection.insert_one(status_dict)
-                print(f"Created new status for task {status_dict['task_id']}: "
-                      f"inserted_id={result.inserted_id}")
+                logger.info(
+                    f"Created new status for task {status_dict['task_id']}: "
+                    f"inserted_id={result.inserted_id}"
+                )
             
         except Exception as e:
-            print(f"Error in save_status: {e}")
+            logger.error(f"Error in save_status: {e}")
             raise
 
     def reset_database(self):
         """Reset all collections in the database"""
         try:
-            # Drop all collections
             self.html_collection.drop()
             self.entailment_collection.drop()
             self.stats_collection.drop()
             self.status_collection.drop()
             
-            print("All collections have been reset successfully")
+            logger.info("All collections have been reset successfully")
             
         except Exception as e:
-            print(f"Error resetting database: {e}")
+            logger.error(f"Error resetting database: {e}")
             raise
 
     def get_next_user_request(self):
@@ -286,11 +296,11 @@ class MongoDBHandler:
                 self.save_status(status_dict)
                 
                 return status_dict
-            
+
             return None  # No requests found
             
         except Exception as e:
-            print(f"Error getting next user request: {e}")
+            logger.error(f"Error getting next user request: {e}")
             return None
 
 class RandomItemCollector:
@@ -326,7 +336,7 @@ class RandomItemCollector:
                 return random.sample(all_qids, min(num_qids, len(all_qids)))
             except Exception as e:
                 if attempt < max_retries - 1:
-                    print(f"Error: {e}. {delay} seconds later retry...")
+                    logger.error(f"Error: {e}. {delay} seconds later retry...")
                     time.sleep(delay)
         return []
 
@@ -338,7 +348,7 @@ class ProVeService:
         self.setup_signal_handlers()
         
         # Schedule settings
-        schedule.every().day.at("02:00").do(self.run_top_viewed_items)  
+        schedule.every().day.at("02:00").do(self.run_top_viewed_items)
         schedule.every().saturday.at("03:00").do(self.run_pagepile_list)
 
     def _load_config(self, config_path):
@@ -348,15 +358,15 @@ class ProVeService:
                 config = yaml.safe_load(file)
             return config
         except Exception as e:
-            print(f"Error loading config file: {e}")
-            return {}  # Return empty config if loading fails
+            logger.error(f"Error loading config file: {e}")
+            return {}
             
     def setup_signal_handlers(self):
         signal.signal(signal.SIGINT, self.handle_shutdown)
         signal.signal(signal.SIGTERM, self.handle_shutdown)
         
     def handle_shutdown(self, signum, frame):
-        print("\nShutdown signal received. Cleaning up...")
+        logger.fatal("Shutdown signal received. Cleaning up...")
         self.running = False
         
     def initialize_resources(self):
@@ -364,21 +374,19 @@ class ProVeService:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-
-                print("Attempting to initialize resources...")
-                
-
+                logger.info("Attempting to initialize resources...")
                 self.mongo_handler = MongoDBHandler()
-                print("MongoDB connection successful")
+                logger.info("WikiDataMongoDB connection successful")
                 
 
                 self.models = ProVe_main_process.initialize_models()
-                print("Models initialized successfully")
+                logger.info("Models initialized successfully")
                 
                 return True
             except Exception as e:
-                print(f"Initialization attempt {attempt + 1} failed: {str(e)}")
+                logger.error(f"Initialization attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
+                    logger.error("Failed to initialize resources")
                     return False
                 time.sleep(5)
                 
@@ -409,15 +417,14 @@ class ProVeService:
                 self.mongo_handler.save_status(status_dict)
                 
             except Exception as e:
-                print(f"Error processing task {task_id}: {e}")
+                logger.error(f"Error processing task {task_id}: {e}")
                 status_dict['status'] = 'error'
                 status_dict['error_message'] = str(e)
                 self.mongo_handler.save_status(status_dict)
         
     def retry_processing(self):
         """Retry processing for items stuck in processing state."""
-        retry_limit = 3  
-        current_time = datetime.utcnow()
+        retry_limit = 3
 
         # Find items that are in processing state
         stuck_items = self.mongo_handler.status_collection.find({
@@ -427,7 +434,7 @@ class ProVeService:
         for item in stuck_items:
             # Check the number of retries
             if item.get('retry_count', 0) < retry_limit:
-                print(f"Retrying QID {item['qid']}...")
+                logger.info(f"Retrying QID {item['qid']}...")
                 # Increment the retry count
                 self.mongo_handler.status_collection.update_one(
                     {'_id': item['_id']},
@@ -436,7 +443,7 @@ class ProVeService:
                 # Reprocess the item
                 self.main_loop(item) 
             else:
-                print(f"QID {item['qid']} has reached the maximum retry limit. Updating status to error.")
+                logger.error(f"QID {item['qid']} has reached the maximum retry limit. Updating status to error.")
                 # Update the status to error if retry limit is reached
                 self.mongo_handler.status_collection.update_one(
                     {'_id': item['_id']},
@@ -447,10 +454,10 @@ class ProVeService:
         """Main service loop with improved error handling"""
         try:
             if not self.initialize_resources():
-                print("Failed to initialize resources. Exiting...")
+                logger.fatal("Failed to initialize resources. Exiting...")
                 sys.exit(1)
-            
-            print("Service started successfully")
+
+            logger.info("Service started successfully")
             
             while self.running:
                 try:
@@ -458,7 +465,7 @@ class ProVeService:
                     status_dict = self.mongo_handler.get_next_user_request()
                     
                     if status_dict:
-                        print(f"Processing request for QID: {status_dict['qid']}")
+                        logger.info(f"Processing request for QID: {status_dict['qid']}")
                         self.main_loop(status_dict)
                     else:
                         self.check_and_run_random_qid()
@@ -469,26 +476,24 @@ class ProVeService:
                     time.sleep(1)
 
                 except Exception as e:
-                    print(f"Main loop error: {str(e)}")
+                    logger.error(f"Main loop error: {str(e)}")
                     time.sleep(30)
                 
         except Exception as e:
-            print(f"Fatal error in service: {str(e)}")
+            logger.fatal(f"Fatal error in service: {str(e)}")
             sys.exit(1)
 
     def run_top_viewed_items(self):
-
-        print("Running process_top_viewed_items...")
+        logger.info("Running process_top_viewed_items...")
         process_top_viewed_items(limit=300)
 
     def run_pagepile_list(self):
-
-        print("Running process_pagepile_list...")
+        logger.info("Running process_pagepile_list...")
         process_pagepile_list()
 
     def check_and_run_random_qid(self):
         if not self.mongo_handler.status_collection.find_one({'status': 'in queue'}):
-            print("No QIDs in queue, running process_random_qid...")
+            logger.info("No QIDs in queue, running process_random_qid...")
             for _ in range(5): 
                 process_random_qid()
 

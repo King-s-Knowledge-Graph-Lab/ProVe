@@ -7,9 +7,11 @@ from utils.textual_entailment_module import TextualEntailmentModule
 from tqdm import tqdm
 from datetime import datetime
 
+from utils.logger import logger
+
 class ClaimEntailmentChecker:
     def __init__(self, config_path: str = 'config.yaml', text_entailment=None):
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         self.config = self.load_config(config_path)
         # Use provided model or create new one
         self.te_module = text_entailment or TextualEntailmentModule()
@@ -223,7 +225,7 @@ class ClaimEntailmentChecker:
         return final_results
 
 if __name__ == "__main__":
-    qid = 'Q3136081'
+    qid = 'Q192309'
     
     from wikidata_parser import WikidataParser
     from refs_html_collection import HTMLFetcher
@@ -231,22 +233,27 @@ if __name__ == "__main__":
     from refs_html_to_evidences import EvidenceSelector
 
     # Get URLs and claims
+    print('Processing qid:', qid)
     parser = WikidataParser()
     parser_result = parser.process_entity(qid)
     
     # Fetch HTML content
-    fetcher = HTMLFetcher(config_path='config.yaml')
+    print('Fetching HTML')
+    fetcher = HTMLFetcher(config_path='local.yaml')
     html_df = fetcher.fetch_all_html(parser_result['urls'], parser_result)
     
     # Convert HTML to sentences
+    print('Processing HTML to sentences')
     processor = HTMLSentenceProcessor()
     sentences_df = processor.process_html_to_sentences(html_df)
     
     # Process evidence selection
+    print('Processing evidence selection')
     selector = EvidenceSelector()
     evidence_df = selector.process_evidence(sentences_df, parser_result)
     
     # Check entailment with metadata
+    print('Checking entailment')
     checker = ClaimEntailmentChecker()  
     entailment_results = checker.process_entailment(evidence_df, html_df, qid)
     
