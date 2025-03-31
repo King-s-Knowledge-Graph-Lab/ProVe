@@ -1,3 +1,5 @@
+import pandas as pd
+
 from wikidata_parser import WikidataParser
 from refs_html_collection import HTMLFetcher
 from refs_html_to_evidences import HTMLSentenceProcessor, EvidenceSelector
@@ -5,7 +7,6 @@ from claim_entailment import ClaimEntailmentChecker
 from utils.textual_entailment_module import TextualEntailmentModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 from utils.verbalisation_module import VerbModule
-import pandas as pd
 
 def initialize_models():
     """Initialize all required models once"""

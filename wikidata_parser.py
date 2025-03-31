@@ -1,9 +1,12 @@
+import ast
+import json
+from typing import List, Dict, Any
+
 from qwikidata.linked_data_interface import get_entity_dict_from_api
 import nltk
-from typing import List, Dict, Any
-import yaml, json, ast
 import pandas as pd
 import requests
+import yaml
 
 from utils.logger import logger
 

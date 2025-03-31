@@ -2,8 +2,8 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
 
-LOG_PATH = "/home/ubuntu/RQV/logs/"
-LOG_FILENAME = "ProVe.log"
+from .secrets import LOG_FILENAME, LOG_PATH
+
 
 if not os.path.exists(LOG_PATH):
     os.makedirs(LOG_PATH, exist_ok=True)
