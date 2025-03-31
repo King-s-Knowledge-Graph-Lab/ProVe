@@ -2,7 +2,7 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
 
-from secrets import API_KEY, LOG_PATH, LOG_FILENAME
+from local_secrets import API_KEY, LOG_PATH, LOG_FILENAME
 
 
 if not os.path.exists(LOG_PATH):

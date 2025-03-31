@@ -8,7 +8,8 @@ import sys
 
 from pymongo import MongoClient
 
-from .utils import get_ip_location, logger, CODE_PATH
+from utils_api import get_ip_location, logger
+from local_secrets import CODE_PATH
 
 sys.path.append(CODE_PATH)
 from ProVe_main_service import MongoDBHandler

@@ -6,7 +6,7 @@ import pandas as pd
 import sys
 import os, json
 
-from utils import CODE_PATH
+from local_secrets import CODE_PATH
 from custom_decorators import log_request
 
 sys.path.append(CODE_PATH)
