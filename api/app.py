@@ -86,6 +86,22 @@ def comprehensive_results():
         return jsonify({"error": f"{type(e).__name__}: {str(e)}"}), 500
 
 
+@app.route('/api/items/summary', methods=['GET'])
+@swag_from(f'{PATH}/docs/api/items/summary.yml')
+@log_request
+def get_summary():
+    target_id = request.args.get('qid', None)
+
+    try:
+        if target_id:
+            summary = functions.get_summary(target_id)
+            return jsonify(summary), 200
+        else:
+            return jsonify({'error': 'Invalid request'}), 400
+    except Exception as e:
+        return jsonify({'error': f'type(e).__name__): {str(e)}'}), 500
+
+
 @app.route('/api/task/checkQueue', methods=['GET'])
 @swag_from(f'{PATH}/docs/api/task/checkQueue.yml')
 @log_request

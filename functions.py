@@ -1,4 +1,5 @@
 from datetime import datetime
+from copy import deepcopy
 import json
 import sqlite3
 from urllib.parse import urlparse
@@ -253,13 +254,78 @@ def CheckItemStatus(target_id):
     except Exception as e:
         logger.error("Error in CheckItemStatus: %s", e)
         return {'qid': target_id, 'status': 'Error checking status'}
-    
+
+
+def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
+    result = mongo_handler.summary_collection.find_one({'_id': target_id})
+    summary = deepcopy(result)
+
+    if result is None or update:
+        information = GetItem(target_id)
+
+        if not isinstance(information, list) or len(information) == 0:
+            return None
+
+        item = information[0]
+        if 'error' in item or item.get('status') == 'error':
+            return {'status': item.get('status', 'Not processed yet')}
+
+        task_id = item.get("task_id")
+        counter = pd.DataFrame(information[1:])
+
+        total_claims = mongo_handler.stats_collection.find_one(
+            {'task_id': task_id, 'entity_id': target_id},
+            {'total_claims': 1, '_id': 0}
+        ).get('total_claims', None)
+
+        version = item.get('algo_version', 'Not processed yet')
+        last_update = item.get('start_time', 'Not processed yet')
+
+        result = {
+            'algoVersion': version,
+            'lastUpdate': last_update,
+            'status': 'processed',
+            'totalClaims': total_claims,
+        }
+        if len(information) < 2 or information[1].get('Result') == 'No available URLs':
+            result['status'] = 'No available URLs'
+            result['proveScore'] = 1.
+            mongo_handler.summary_collection.insert_one({'_id': target_id, **result})
+            return result
+
+        refuting_count = counter[counter['result'] == 'REFUTES'].shape[0]
+        inconclusive_count = counter[counter['result'] == 'NOT ENOUGH INFO'].shape[0]
+        supportive_count = counter[counter['result'] == 'SUPPORTS'].shape[0]
+        irretrievable_count = counter[counter['result'] == 'error'].shape[0]
+        total_counts = sum([refuting_count, inconclusive_count, supportive_count, irretrievable_count])
+        prove_score = (supportive_count - refuting_count) / total_counts if total_counts else None
+
+        result.update({
+            'proveScore': prove_score,
+            'count': {
+                'refuting': refuting_count,
+                'inconclusive': inconclusive_count,
+                'supportive': supportive_count,
+                'irretrievable': irretrievable_count,
+            }
+        })
+
+        if not update or (update and summary is None):
+            mongo_handler.summary_collection.insert_one({'_id': target_id, **result})
+        else:
+            mongo_handler.summary_collection.update_one({'_id': target_id, **result})
+    else:
+        result.pop('_id', None)
+
+    return result
+
+
 #1.2. calculate the reference score for an item
 #Examples = Q5820 : error/ Q5208 : good/ Q42220 : None.
 def comprehensive_results(target_id):
     """Get comprehensive results for a target ID including reference score and grouped results"""
     response = GetItem(target_id)
-    
+
     if not isinstance(response, list) or not response:
         return None
         
