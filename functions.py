@@ -1,9 +1,11 @@
 from datetime import datetime
+from collections import defaultdict
 from copy import deepcopy
 import json
 import sqlite3
 from urllib.parse import urlparse
 import uuid
+from typing import Dict, Any, List
 
 import pandas as pd
 from plotly.subplots import make_subplots
@@ -13,6 +15,7 @@ import yaml
 
 from ProVe_main_service import MongoDBHandler
 from utils.logger import logger
+from utils.objects import Status, HtmlContent, Entailment
 
 mongo_handler = MongoDBHandler()
 
@@ -188,6 +191,86 @@ def GetItem(target_id):
         logger.error("Error in GetItem: %s", e)
         return [{'error': f'Error retrieving data: {str(e)}'}]
 
+
+def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[Dict[str, Any]]:
+    try:
+        if task_id is None:
+            status = mongo_handler.status_collection.find_one(
+                {'qid': target_id},
+                sort=[('requested_timestamp', -1)]
+            )
+
+            if not status:
+                return get_item_from_sqlite(target_id)
+
+            status = Status(**status)
+            task_id = status.task_id
+
+        html_contents = mongo_handler.html_collection.find({"task_id": task_id})
+
+        items = []
+        if html_contents:
+            html_contents = [HtmlContent(**html_content) for html_content in html_contents]
+            iterable_items = [
+                html_content
+                for html_content in html_contents
+                if html_content.status == 200
+            ]
+
+            entailmments = mongo_handler.entailment_collection.aggregate([
+                {"$match": {
+                    "task_id": task_id,
+                    "reference_id": {"$in": [item.reference_id for item in iterable_items]}
+                }},
+                {"$sort": {"text_entailment_score": -1}},
+                {"$group": {
+                    "_id": {
+                        "reference_id": "$reference_id",
+                        "result": "$result"
+                    },
+                    "docs": {"$push": "$$ROOT"}
+                }}
+            ])
+
+            entailmments_by_ref = defaultdict(lambda: defaultdict(list))
+            for entailmment in entailmments:
+                ref_id = entailmment.get("_id").get("reference_id")
+                result = entailmment.get("_id").get("result")
+                entailmments_by_ref[ref_id][result] = [
+                    Entailment(**docs)
+                    for docs in entailmment.get("docs")
+                ]
+
+            for html_content in iterable_items:
+                item_entailments = entailmments_by_ref.get(html_content.reference_id, {})
+
+                if "SUPPORTS" in item_entailments.keys():
+                    html_content.add_info_item(item_entailments["SUPPORTS"][0])
+                elif "NOT ENOUGH INFO" in item_entailments.keys():
+                    html_content.add_info_item(item_entailments["NOT ENOUGH INFO"][0])
+                elif "REFUTES" in item_entailments.keys():
+                    html_content.add_info_item(item_entailments["REFUTES"][0])
+
+            items = [html_content.item for html_content in html_contents]
+
+        if header and status:
+            header_info = {
+                "qid": target_id,
+                "task_id": task_id,
+                "status": status.status,
+                "algo_version": status.algo_version,
+                "start_time": status.get_formated_requested_timestamp()
+            }
+            items = [header_info] + items
+        elif header:
+            raise NotImplementedError("GetItem with task_id param and header not supported")
+
+        return items
+    except Exception as e:
+        logger.error("Error in get_item: %s", e)
+        return [{'error': f"Error retrieving data: {str(e)}"}]
+
+
 def get_item_from_sqlite(target_id):
     """Existing SQLite search logic"""
     check_item = get_filtered_data(db_path, 'status', 'qid', f'{target_id}')
@@ -261,7 +344,7 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
     summary = deepcopy(result)
 
     if result is None or update:
-        information = GetItem(target_id)
+        information = get_item(target_id)
 
         if not isinstance(information, list) or len(information) == 0:
             return None
@@ -318,6 +401,83 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
         result.pop('_id', None)
 
     return result
+
+
+def get_history(
+    target_id: str,
+    from_date: datetime,
+    to_date: datetime,
+    index: int,
+) -> Dict[str, Any]:
+
+    def get_summary_from_item(
+        job: Status,
+        items: List[Dict[str, Any]],
+        target_id: str
+    ) -> Dict[str, Any]:
+        counter = pd.DataFrame(items)
+        refuting_count = counter[counter['result'] == 'REFUTES'].shape[0]
+        inconclusive_count = counter[counter['result'] == 'NOT ENOUGH INFO'].shape[0]
+        supportive_count = counter[counter['result'] == 'SUPPORTS'].shape[0]
+        irretrievable_count = counter[counter['result'] == 'error'].shape[0]
+        total_counts = sum([refuting_count, inconclusive_count, supportive_count, irretrievable_count])
+        prove_score = (supportive_count - refuting_count) / total_counts if total_counts else None
+
+        return {
+            "algoVersion": job.algo_version,
+            "lastUpdate": job.requested_timestamp.isoformat(),
+            "status": job.status,
+            "totalClaims": mongo_handler.stats_collection.find_one(
+                {'task_id': job.task_id, 'entity_id': target_id},
+                {'total_claims': 1, '_id': 0}
+            ).get('total_claims', None),
+            "proveScore": prove_score,
+            "count": {
+                "refuting": refuting_count,
+                "inconclusive": inconclusive_count,
+                "supportive": supportive_count,
+                "irretrievable": irretrievable_count,
+            }
+        }
+
+    jobs = mongo_handler.status_collection.find({'qid': target_id}).sort("completed_timestamp", -1)
+    if jobs:
+        jobs = [Status(**job) for job in jobs]
+        jobs = [job for job in jobs if job.status == 'completed']
+
+        if len(jobs) == 0:
+            return {}
+
+        if from_date:
+            jobs = [job for job in jobs if from_date <= job <= to_date]
+
+            history = {}
+            for job in jobs:
+                items = get_item(target_id, job.task_id, header=False)
+                items = get_summary_from_item(job, items, target_id)
+                history[job.completed_timestamp.isoformat()] = items
+            return history
+
+        if index is not None:
+            if index > len(jobs):
+                index = len(jobs)
+
+            if index == 0:
+                job = jobs[0]
+                return {
+                    job.completed_timestamp.isoformat(): get_summary_from_item(
+                        job, get_item(target_id, job.task_id, header=False), target_id
+                    )
+                }
+            else:
+                iterable_jobs = jobs[:index + 1]
+                history = {}
+                for job in iterable_jobs:
+                    items = get_item(target_id, job.task_id, header=False)
+                    items = get_summary_from_item(job, items, target_id)
+                    history[job.completed_timestamp.isoformat()] = items
+                return history
+    return {}
 
 
 #1.2. calculate the reference score for an item

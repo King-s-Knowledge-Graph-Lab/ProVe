@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from flask import Flask, jsonify, request, render_template_string
 from flask_cors import CORS
@@ -99,7 +100,45 @@ def get_summary():
         else:
             return jsonify({'error': 'Invalid request'}), 400
     except Exception as e:
-        return jsonify({'error': f'type(e).__name__): {str(e)}'}), 500
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
+
+
+@app.route('/api/items/history', methods=['GET'])
+@log_request
+def get_history():
+    target_id = request.args.get('qid', None)
+
+    # Get history by date
+    from_date = request.args.get('from', None)
+    to_date = request.args.get('to', datetime.now())
+
+    # Get history by index
+    index = request.args.get('index', None)
+
+    try:
+        if target_id:
+            if isinstance(to_date, str):
+                to_date = datetime.strptime(to_date, '%Y-%m-%d')
+                if to_date > datetime.utcnow():
+                    return jsonify({'error': 'Invalid request (to after today)'}), 400
+
+            if from_date:
+                from_date = datetime.strptime(from_date, '%Y-%m-%d')
+                if from_date > to_date:
+                    return jsonify({'error': 'Invalid request (from after to)'}), 400
+
+            if index:
+                try:
+                    index = int(index)
+                except ValueError:
+                    return jsonify({'error': 'Invalid request (index has to be integer)'}), 400
+
+            history = functions.get_history(target_id, from_date, to_date, index)
+            return jsonify(history), 200
+        else:
+            return jsonify({'error': 'Invalid request'}), 400
+    except Exception as e:
+        return jsonify({'error': f'{type(e).__name__} {str(e)}'}), 500
 
 
 @app.route('/api/task/checkQueue', methods=['GET'])
