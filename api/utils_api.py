@@ -40,4 +40,5 @@ def get_ip_location(ip: str) -> None:
         "state": data.get("state", None),
         "latitude": data.get("latitude", None),
         "longitude": data.get("longitude", None),
+        "hash": hash(ip)
     }

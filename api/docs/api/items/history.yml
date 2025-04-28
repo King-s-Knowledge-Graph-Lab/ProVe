@@ -1,0 +1,105 @@
+Retrieve historical summary results for an item
+This endpoint returns the historical summaries for a specific item identified by its QID.
+---
+parameters:
+  - name: qid
+    in: query
+    type: string
+    required: true
+    description: The QID of the item to retrieve historical verification summaries for.
+    example: "Q42"
+  - name: from
+    in: query
+    type: string
+    format: date
+    required: false
+    description: The start date for the historical data range.
+    example: "2025-03-01"
+  - name: to
+    in: query
+    type: string
+    format: date
+    required: false
+    description: The end date for the historical data range (defaults to current date if not provided).
+    example: "2025-04-01"
+  - name: index
+    in: query
+    type: integer
+    required: false
+    description: Specific historical index of the item summary to retrieve.
+    example: 1
+responses:
+  200:
+    description: A JSON object containing historical verification summaries indexed by timestamp.
+    schema:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          algoVersion:
+            type: string
+            description: The version of the algorithm used to generate the results.
+            example: "1.1.1"
+          count:
+            type: object
+            properties:
+              inconclusive:
+                type: integer
+                example: 0
+              irretrievable:
+                type: integer
+                example: 2
+              refuting:
+                type: integer
+                example: 0
+              supportive:
+                type: integer
+                example: 2
+          lastUpdate:
+            type: string
+            format: date-time
+            description: The timestamp of the last update.
+            example: "2025-04-01T14:18:29.326Z"
+          proveScore:
+            type: number
+            format: float
+            description: An overall score indicating the level of support for the claims.
+            example: 0.5
+          status:
+            type: string
+            enum: [pending, processing, completed]
+            description: The current processing status of the results.
+            example: "completed"
+          totalClaims:
+            type: integer
+            description: The total number of claims considered for this item.
+            example: 149
+    examples:
+      application/json:
+        "2025-04-01T14:18:50.401000":
+          algoVersion: "1.1.1"
+          count:
+            inconclusive: 0
+            irretrievable: 2
+            refuting: 0
+            supportive: 2
+          lastUpdate: "2025-04-01T14:18:29.326000"
+          proveScore: 0.5
+          status: "completed"
+          totalClaims: 149
+  400:
+    description: Bad Request - Missing or invalid parameters.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid request (from after to)"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while retrieving the historical summary results."

@@ -1,0 +1,86 @@
+Retrieve summary results for an item
+This endpoint returns the summary for a specific item identified by its QID.
+---
+parameters:
+  - name: qid
+    in: query
+    type: string
+    required: true
+    description: The QID of the item to retrieve a verification summary for.
+    example: "Q42"
+
+responses:
+  200:
+    description: A JSON object summarising the verification status of claims associated with the item.
+    schema:
+      type: object
+      properties:
+        algoVersion:
+          type: string
+          description: The version of the algorithm used to generate the results.
+          example: "1.1.1"
+        count:
+          type: object
+          properties:
+            inconclusive:
+              type: integer
+              example: 0
+            irretrievable:
+              type: integer
+              example: 2
+            refuting:
+              type: integer
+              example: 0
+            supportive:
+              type: integer
+              example: 2
+        lastUpdate:
+          type: string
+          format: date-time
+          description: The timestamp of the last update.
+          example: "2025-04-01T14:18:29.326Z"
+        proveScore:
+          type: number
+          format: float
+          description: An overall score indicating the level of support for the claims.
+          example: 0.5
+        status:
+          type: string
+          enum: [pending, processing, processed]
+          description: The current processing status of the results.
+          example: "processed"
+        totalClaims:
+          type: integer
+          description: The total number of claims considered for this item.
+          example: 149
+    examples:
+      application/json:
+        algoVersion: "1.1.1"
+        count:
+          inconclusive: 0
+          irretrievable: 2
+          refuting: 0
+          supportive: 2
+        lastUpdate: "2025-04-01T14:18:29.326Z"
+        proveScore: 0.5
+        status: "processed"
+        totalClaims: 149
+
+  400:
+    description: Bad Request - Missing or invalid 'qid' parameter.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing 'qid' parameter"
+
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "An error occurred while retrieving the summary results."
+

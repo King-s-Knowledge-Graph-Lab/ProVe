@@ -9,7 +9,7 @@ import sys
 from pymongo import MongoClient
 
 from utils_api import get_ip_location, logger
-from local_secrets import CODE_PATH
+from local_secrets import CODE_PATH, SOURCE
 
 sys.path.append(CODE_PATH)
 from ProVe_main_service import MongoDBHandler
@@ -71,6 +71,9 @@ def log_request(func):
         end_time = time.monotonic()
         elapsed_time = end_time - start_time
 
+        if SOURCE != 'server':
+            return response
+
         threading.Thread(
             target=log_usage_information,
             args=(timestamp, method, url, headers, body, elapsed_time),
@@ -97,7 +100,6 @@ def log_usage_information(
             if ip:
                 try:
                     headers["location"] = get_ip_location(ip)
-                    headers["locations"]["hash"] = hash(ip)
                 except KeyError:
                     headers["X-Real-Ip"] = ip
                     logger.error(f"when retrieving location for {ip}")

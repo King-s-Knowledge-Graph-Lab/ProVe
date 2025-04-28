@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ProVe - Provenance Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-link" href="{{ url_for('prove') }}">ProVe</a>
+            <a class="navbar-brand" href="{{ url_for('hackathon') }}">Hackathon</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>ProVe: Automated PROvenance VErification</h1>
+
+        <p><strong>ProVe</strong> is a Wikidata gadget and Web API designed to improve the quality of references for Wikidata statements. It automatically verifies references by combining advanced Natural Language Processing (NLP) techniques with external document retrieval and textual entailment analysis.</p>
+
+        <h2>Overview</h2>
+        <p>ProVe helps Wikidata editors identify statements that need attention by:</p>
+        <ul>
+            <li>Automatically verbalizing Wikidata triples into natural language claims.</li>
+            <li>Retrieving and segmenting external reference documents into meaningful passages.</li>
+            <li>Selecting the most relevant passages using semantic similarity (BERT models).</li>
+            <li>Performing entailment recognition to assess if references support or refute statements.</li>
+            <li>Calculating an overall <strong>ProVe Score</strong> for Wikidata items based on aggregated evidence for all item statements.</li>
+        </ul>
+
+        <h2>Architecture</h2>
+        <p>ProVe is hosted on King's College London's HPC infrastructure and consists of:</p>
+        <ul>
+            <li>A main server to handle user requests and orchestrate processing.</li>
+            <li>ML models for verbalization (T5) and similarity scoring (BERT).</li>
+            <li>A gadget that displays results directly on Wikidata item pages.</li>
+            <li>A Web API that allows programmatic access to item verification results.</li>
+            <li>A database storing evaluation results for reuse and recomputation.</li>
+        </ul>
+
+        <h2>ProVe Gadget</h2>
+        <p>Once installed, the gadget automatically analyses every statement in a Wikidata item that has an external reference. It provides:</p>
+        <ul>
+            <li>Support stance labels: <strong>Supported</strong>, <strong>Refuted</strong>, or <strong>Inconclusive</strong> for each item statement.</li>
+            <li>Relevant evidence sentences extracted from reference documents.</li>
+            <li>An overall <strong>ProVe Score</strong> (-1 to 1) for the item as a whole displayed at the top left of the item page.</li>
+        </ul>
+
+        <h2>Web API</h2>
+        <p>The API enables programmatic access for:
+            <ul>
+                <li>Obtaining results for specific items.</li>
+                <li>Submitting items for (re)processing.</li>
+                <li>Obtaining historical data.</li>
+            </ul>
+            <p>See API documentation: <a href="https://kclwqt.sites.er.kcl.ac.uk/apidocs/" target="_blank">ProVe API</a>.</p>
+        </p>
+
+        <h2>Technical Details</h2>
+        <p>Given a statement and reference:</p>
+        <ul>
+            <li>Verbalisation with a fine-tuned T5 model generates a natural language sentence.</li>
+            <li>Passages are scored for relevance, and top-5 passages are selected.</li>
+            <li>Textual entailment checks whether the passage supports, refutes, or is inconclusive about the claim.</li>
+            <li>Aggregation of individual reference scores yields the final <strong>ProVe Score</strong>.</li>
+        </ul>
+
+        <h2>Limitations</h2>
+        <ul>
+            <li>Only works for English-labeled Wikidata triples currently.</li>
+            <li>Focuses on external references (no internal citations, no visual evidence like images).</li>
+            <li>Handles structured text reasonably well but may struggle with certain formats like tables.</li>
+        </ul>
+
+        <h2>Community Involvement</h2>
+        <p>ProVe welcomes feedback and contributions! Editors can register interest on <a href="https://www.wikidata.org/wiki/Wikidata:ProVe" target="_blank">WikiProject Reference Verification</a>.</p>
+
+        <h2>Resources</h2>
+        <ul>
+            <li><a href="https://github.com/King-s-Knowledge-Graph-Lab/RQV" target="_blank">GitHub: ProVe Source Code</a></li>
+            <li><a href="https://kclwqt.sites.er.kcl.ac.uk/apidocs/" target="_blank">ProVe API Documentation</a></li>
+            <li><a href="https://www.wikidata.org/wiki/Wikidata:ProVe" target="_blank">Wikidata: ProVe Official Page</a></li>
+        </ul>
+
+        <hr style="margin-top: 50px;">
+
+        <h2>Subscribe to ProVe Updates</h2>
+        <p>Get notified about new ProVe features, updates, and workshops!</p>
+
+        <form id="newsletter-form" method="post" action="{{ url_for('subscribe_newsletter') }}">
+            <input type="text" id="name" name="name" class="form-input" placeholder="Your Name" required>
+            <input type="email" id="email" name="email" class="form-input" placeholder="Your Email" required>
+            <button type="submit">Subscribe</button>
+            <span id="success-badge" class="success-badge" style="display:none;">✔ Subscribed!</span>
+        </form>
+
+        <h2>Citation</h2>
+        <p>You can cite ProVe as follows:</p>
+        <div class="citation-block">
+            <pre id="bibtex">
+@article{amaral2024prove,
+    title={ProVe: A pipeline for automated provenance verification of knowledge graphs against textual sources},
+    author={Amaral, Gabriel and Rodrigues, Odinaldo and Simperl, Elena},
+    journal={Semantic Web},
+    volume={15},
+    number={6},
+    pages={2159--2192},
+    year={2024},
+    publisher={SAGE Publications Sage UK: London, England}
+}
+            </pre>
+            <button onclick="copyBibtex()">Copy</button>
+            <div id="copy-message" class="copy-message" style="display:none;">Copied!</div>
+        </div>
+
+    </div>
+
+<script>
+function copyBibtex() {
+    const bibtex = document.getElementById("bibtex").innerText;
+    navigator.clipboard.writeText(bibtex).then(() => {
+        const message = document.getElementById("copy-message");
+        message.style.display = "block";
+        message.style.opacity = 1;
+
+        setTimeout(() => {
+            message.style.transition = "opacity 0.5s ease";
+            message.style.opacity = 0;
+        }, 2000);
+
+        setTimeout(() => {
+            message.style.display = "none";
+        }, 2500);
+    }).catch(err => {
+        console.error('Error copying BibTeX:', err);
+    });
+}
+
+    document.getElementById('newsletter-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const name = document.getElementById('name').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const badge = document.getElementById('success-badge');
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!name) {
+            alert("Please enter your name.");
+            return;
+        }
+        if (!emailRegex.test(email)) {
+            alert("Please enter a valid email address.");
+            return;
+        }
+
+        fetch("{{ url_for('subscribe_newsletter') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: `name=${encodeURIComponent(name)}&email=${encodeURIComponent(email)}`
+        })
+        .then(response => {
+            if (response.ok) {  // <<< check if response is OK
+                // Show badge
+                badge.style.display = "inline-block";
+                badge.style.opacity = 1;
+
+                setTimeout(() => {
+                    badge.style.transition = "opacity 0.5s ease";
+                    badge.style.opacity = 0;
+                }, 3000);
+
+                setTimeout(() => {
+                    badge.style.display = "none";
+                    document.getElementById('newsletter-form').reset();
+                }, 3500);
+            } else {
+                console.error('Subscription failed:', response.statusText);
+            }
+        })
+        .catch(error => {
+            console.error('Error subscribing:', error);
+        });
+    });
+</script>
+
+</body>
+
+</html>

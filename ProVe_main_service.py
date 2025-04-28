@@ -1,4 +1,3 @@
-import datetime
 from datetime import datetime
 import time
 from threading import Lock
@@ -14,7 +13,7 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 import yaml
 
 from background_processing import (
-    process_top_viewed_items, 
+    process_top_viewed_items,
     process_pagepile_list,
     process_random_qid
 )
@@ -43,6 +42,7 @@ class MongoDBHandler:
                 self.entailment_collection = self.db['entailment_results']
                 self.stats_collection = self.db['parser_stats']
                 self.status_collection = self.db['status']
+                self.summary_collection = self.db['summary']
                 logger.info("Successfully connected to WikiData verification MongoDB")
                 return
             except Exception as e:
@@ -180,25 +180,25 @@ class MongoDBHandler:
                 'processing_start_timestamp',
                 'completed_timestamp'
             ]
-            
+
             # Convert string timestamps to datetime objects
             for field in timestamp_fields:
                 if status_dict.get(field) and status_dict[field] != 'null':
                     if isinstance(status_dict[field], str):
                         status_dict[field] = datetime.strptime(
-                            status_dict[field].rstrip('Z'), 
+                            status_dict[field].rstrip('Z'),
                             '%Y-%m-%dT%H:%M:%S.%f'
                         )
-            
+
             # Add last update timestamp
             status_dict['last_updated'] = datetime.now()
-            
+
             # Find existing document by task_id and qid
             existing_doc = self.status_collection.find_one({
                 'task_id': status_dict['task_id'],
                 'qid': status_dict['qid']
             })
-            
+
             if existing_doc:
                 # Update existing document
                 result = self.status_collection.update_one(
@@ -219,7 +219,7 @@ class MongoDBHandler:
                     f"Created new status for task {status_dict['task_id']}: "
                     f"inserted_id={result.inserted_id}"
                 )
-            
+
         except Exception as e:
             logger.error(f"Error in save_status: {e}")
             raise
@@ -396,32 +396,34 @@ class ProVeService:
             try:
                 self.mongo_handler.ensure_connection()
                 self.mongo_handler.save_status(status_dict)
-                
+
                 qid = status_dict['qid']
                 task_id = status_dict['task_id']
-                
+
                 html_df, entailment_results, parser_stats = ProVe_main_process.process_entity(
                     qid, self.models
                 )
-                
+
                 html_df['task_id'] = task_id
                 entailment_results['task_id'] = task_id
                 parser_stats['task_id'] = task_id
-                
+
                 self.mongo_handler.save_html_content(html_df)
                 self.mongo_handler.save_entailment_results(entailment_results)
                 self.mongo_handler.save_parser_stats(parser_stats)
-                
+
                 status_dict['status'] = 'completed'
                 status_dict['completed_timestamp'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
                 self.mongo_handler.save_status(status_dict)
-                
+                from functions import get_summary
+                get_summary(qid, update=True)
+
             except Exception as e:
                 logger.error(f"Error processing task {task_id}: {e}")
                 status_dict['status'] = 'error'
                 status_dict['error_message'] = str(e)
                 self.mongo_handler.save_status(status_dict)
-        
+
     def retry_processing(self):
         """Retry processing for items stuck in processing state."""
         retry_limit = 3
