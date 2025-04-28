@@ -104,6 +104,7 @@ def get_summary():
 
 
 @app.route('/api/items/history', methods=['GET'])
+@swag_from(f'{PATH}/docs/api/items/history.yml')
 @log_request
 def get_history():
     target_id = request.args.get('qid', None)
@@ -361,7 +362,6 @@ from db.website import db, NewsletterSubscriber
 from db.website import User, Submission
 from local_secrets import UPLOAD_FOLDER, ALLOWED_EXTENSIONS
 
-app = Flask(__name__)
 app.secret_key = sha256(os.urandom(16)).hexdigest()
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
