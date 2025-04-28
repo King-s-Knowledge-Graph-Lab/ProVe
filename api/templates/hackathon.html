@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Hackathon</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-link" href="{{ url_for('prove') }}">ProVe</a>
+            <a class="navbar-brand" href="{{ url_for('hackathon') }}">Hackathon</a>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>ProVe Hackathon Challenge 2025</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div id="flash-container">
+            {% for category, message in messages %}
+            <p class="flash flash-{{ category }}">{{ message }}</p>
+            {% endfor %}
+        </div>
+        <script>
+            setTimeout(() => {
+                const flashContainer = document.getElementById("flash-container");
+                if (flashContainer) {
+                    flashContainer.style.transition = "opacity 0.5s ease";
+                    flashContainer.style.opacity = 0;
+                    setTimeout(() => flashContainer.remove(), 500);
+                }
+            }, 4000);
+        </script>
+        {% endif %}
+        {% endwith %}
+
+        {% if user %}
+        <form action="{{ url_for('logout') }}" method="post" style="float: right;">
+            <button type="submit">Logout</button>
+        </form>
+        <p>Welcome, <strong>{{ user.username }}</strong></p>
+        {% endif %}
+
+        <h2>Task Description</h2>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+
+        <h3>Examples</h3>
+        <ul>
+            <li>Lorem ipsum example one</li>
+            <li>Lorem ipsum example two</li>
+            <li>Lorem ipsum example three</li>
+        </ul>
+
+        {% if not user %}
+        <form method="post" action="{{ url_for('auth') }}">
+            <input name="username" type="text" placeholder="Username" required>
+            <input name="password" type="password" placeholder="Password" required>
+            <button type="submit" name="action" value="login">Log In</button>
+            <button type="submit" name="action" value="signup">Sign Up</button>
+        </form>
+        {% else %}
+
+        <h3>Submit Your ZIP File</h3>
+        <form class="upload-form" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
+            <input class="upload-input" type="file" name="submission" accept=".zip" required>
+            <button class="upload-button" type="submit">Upload</button>
+        </form>
+
+        {% if user_submission %}
+        <p>Your current file:
+            <a href="{{ url_for('uploaded_file', filename=user_submission.filename) }}">
+                {{ user_submission.filename }}
+            </a>
+        </p>
+        {% endif %}
+
+        <h3>All Submissions</h3>
+        <table>
+            <tr>
+                <th>Submission</th>
+                <th>File</th>
+                <th></th>
+            </tr>
+            {% for sub in submissions %}
+            <tr class="{% if user and sub.user.id == user.id %}fade-in{% endif %}">
+                <td class="table-time">{{ sub.upload_time }}</td>
+                <td>
+                    <a
+                        class="truncate"
+                        title="{{ sub.filename }}"
+                        href="{{ url_for('uploaded_file', filename=sub.filename) }}">
+                        {{ sub.filename }}
+                    </a>
+                </td>
+                <td class="table-button-container">
+                    <form action="{{ url_for('delete_submission', filename=sub.filename) }}" method="post">
+                        <button class="table-button" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+        <hr style="margin-top: 50px;">
+
+        <h2>Subscribe to ProVe Updates</h2>
+        <p>Get notified about new ProVe features, updates, and workshops!</p>
+
+        <form id="newsletter-form" method="post" action="{{ url_for('subscribe_newsletter') }}">
+            <input type="text" id="name" name="name" class="form-input" placeholder="Your Name" required>
+            <input type="email" id="email" name="email" class="form-input" placeholder="Your Email" required>
+            <button type="submit">Subscribe</button>
+            <span id="success-badge" class="success-badge" style="display:none;">✔ Subscribed!</span>
+        </form>
+    </div>
+</body>
+
+<script>
+    document.getElementById('newsletter-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const name = document.getElementById('name').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const badge = document.getElementById('success-badge');
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!name) {
+            alert("Please enter your name.");
+            return;
+        }
+        if (!emailRegex.test(email)) {
+            alert("Please enter a valid email address.");
+            return;
+        }
+
+        fetch("{{ url_for('subscribe_newsletter') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: `name=${encodeURIComponent(name)}&email=${encodeURIComponent(email)}`
+        })
+        .then(response => {
+            if (response.ok) {  // <<< check if response is OK
+                // Show badge
+                badge.style.display = "inline-block";
+                badge.style.opacity = 1;
+
+                setTimeout(() => {
+                    badge.style.transition = "opacity 0.5s ease";
+                    badge.style.opacity = 0;
+                }, 3000);
+
+                setTimeout(() => {
+                    badge.style.display = "none";
+                    document.getElementById('newsletter-form').reset();
+                }, 3500);
+            } else {
+                console.error('Subscription failed:', response.statusText);
+            }
+        })
+        .catch(error => {
+            console.error('Error subscribing:', error);
+        });
+    });
+</script>
+</html>

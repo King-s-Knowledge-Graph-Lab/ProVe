@@ -263,6 +263,7 @@ def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[D
             }
             items = [header_info] + items
         elif header:
+            logger.error("GetItem with task_id param and header not supported")
             raise NotImplementedError("GetItem with task_id param and header not supported")
 
         return items
