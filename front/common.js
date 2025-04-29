@@ -480,12 +480,14 @@ function addRow(item, tbody) {
         resultSentence = resultSentence.substring(slashIndex + 1).trim();
     }
 
+    const label = document.getElementsByClassName('wikibase-title-label')[0].innerText
+    const name = item.triple.startsWith(label) ? item.triple.substring(label.length + 1) : item.triple;
     const $row = $(`
         <tr class="row-${item.result.toLowerCase().replace(/ /g, '-')}">
-            <td><a class="modify-btn">${item.triple}</a></td>
+            <td><a style="white-space: normal;" class="modify-btn">${name}</a></td>
             <td>${resultSentence}</td>
             <td>${capitalizeFirstLetter(statusMapping[item.result])}</td>
-            <td><a href="${item.url}" target="_blank">${item.url}</a></td>
+            <td><a href="${item.url}" target="_blank" title="${item.url}">${item.url}</a></td>
         </tr>
     `);
 
@@ -680,13 +682,15 @@ function addStyles() {
                 opacity: 0.8;
             }
             .expandable-table th[data-sort="triple"] {
-                width: 30%; /* Fixed width for the 'Triple' column */
+                width: 20%; /* Fixed width for the 'Triple' column */
             }
             .expandable-table th[data-sort="result_sentence"] {
-                width: 40%; /* Fixed width for the 'Result Sentence' column */
+            }
+            .expandable-table th[data-sort="result_status"] {
+                width: 12%; /* Fixed width for the 'Result Sentence' column */
             }
             .expandable-table th:last-child {
-                width: 10%; /* Fixed width for the 'URL' column */
+                width: 20%; /* Fixed width for the 'URL' column */
             }
             .expandable-table td {
                 word-break: break-word;
