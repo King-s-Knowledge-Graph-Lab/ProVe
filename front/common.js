@@ -12,6 +12,9 @@ const statusMapping = {
 };
 const sortOrder = {};
 const activeFilters = new Set();
+var page = 0;
+var pageSize = 5;
+var currentList = [];
 
 function capitalizeFirstLetter(val) {
     return String(val).charAt(0).toUpperCase() + String(val).slice(1).toLowerCase();
@@ -312,15 +315,84 @@ function updateProveHealthIndicator(data, qid, container) {
 	$proveContainer.append($button);
 }
 
+function addRows(data, tbody) {
+    tbody.empty();
+    const bottom = page * pageSize;
+    const upper = (page * pageSize) + pageSize;
+    const displayData = data.slice(bottom, upper);
+    displayData.forEach((element) => addRow(element, tbody));
+}
+
+function createPagination(data, tbody) {
+    const $element = $(`
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 8rem; margin-top: 0.5rem;">
+            <button id="prevButton">Prev</button>
+            <span id="pageInfo" style="margin: 0;">
+                ${(page + 1) * pageSize} of ${data.length}
+            </span>
+            <button id="nextButton">Next</button>
+        </div>
+    `)
+    
+    $element.find("#prevButton").click(function() {
+        if (page === 0);
+        else  page--;
+        document.getElementById("pageInfo").innerText = `${(page + 1) * pageSize}/${data.length}`;
+        addRows(currentList, tbody);
+    })
+
+    $element.find("#nextButton").click(function() {
+        if (page === Math.ceil(data.length / pageSize) - 1);
+        else {
+            page++;
+            var displayNumber = (page + 1) * pageSize;
+            if (displayNumber > data.length) displayNumber = data.length;
+            document.getElementById("pageInfo").innerText = `${displayNumber}/${data.length}`;
+            addRows(currentList, tbody);
+        }
+    });
+
+    return $element
+}
+
+function setPageSize(data, tbody) {
+    const $pageSizeInput = $(`
+        <div>
+            <select id="pageSizeSelect" style="width: 3rem;">
+            </select>
+        </div>
+    `)
+
+    const pageSizes = ["5", "10", "25", "100", "All"];
+    pageSizes.forEach(function(element){
+        if (parseInt(element) <= data.length) {
+            $pageSizeInput.find("#pageSizeSelect").append(`<option value="${element}">${element}</option>`);
+        }
+        if (element === "All") {
+            $pageSizeInput.find("#pageSizeSelect").append(`<option value="${data.length}">All</option>`);
+        }
+    });
+
+    $pageSizeInput.find("#pageSizeSelect").change(function(element) {
+        pageSize = element.target.value;
+        page = 0;
+        addRows(currentList, tbody);
+    });
+    return $pageSizeInput
+
+}
+
 function createProveTables(data, container) {
     const $statsContainer = displayStatementStats(data).hide();
     const $buttonContainer = $('<div id="prove-buttons"></div>');
     const $toggleButton = $('<button id="prove-toggle">Show/Hide Reference Results</button>');
     const $filterContainer = $('<div id="prove-filters" style="display: none;"></div>')
     const $tablesContainer = $('<div id="prove-tables" style="display: none;"></div>');
+    const $paginationContainer = $('<div id="prove-pagination"></div>')
 
-    $buttonContainer.append($toggleButton);
-    container.append($buttonContainer).append($statsContainer).append($filterContainer).append($tablesContainer);
+    container.append($buttonContainer).append($statsContainer).append($filterContainer);
+    container.append($paginationContainer).append($tablesContainer);
+
 
     const categories = [
         { name: "REFUTES", label: "Refuting", color: "#f9e6e6" },
@@ -363,9 +435,10 @@ function createProveTables(data, container) {
         checkbox.prop('checked', (i, val) => !val);
         if (checkbox.is(":checked")) activeFilters.delete(filterBy);
         else activeFilters.add(filterBy);
-        let filteredData = [...categoryData].filter((item) => !activeFilters.has(item.result));
+        let filteredData = [...currentList].filter((item) => !activeFilters.has(item.result));
         tbody.empty();
-        filteredData.forEach((element) => addRow(element, tbody));
+        currentList = filteredData;
+        addRows(filteredData, tbody);
     });
 
     table.find('th.sortable').click(function () {
@@ -375,10 +448,13 @@ function createProveTables(data, container) {
         sortOrder[sortBy] = !sortOrder[sortBy];
         updateSortArrow(sortOrder[sortBy], sortBy);
         tbody.empty();
-        sortedData.forEach((element) => addRow(element, tbody));
+        currentList = sortedData;
+        addRows(sortedData, tbody);
     });
     table.find('th[data-sort="result_status"]').click();
 
+    $paginationContainer.append(setPageSize(currentList, tbody));
+    $paginationContainer.append(createPagination(currentList, tbody));
 
     let isProveActive = false;
 
@@ -401,6 +477,7 @@ function createProveTables(data, container) {
             });
         }
     });
+    $toggleButton.click();
 }
 
 function transformData(categoryData) {
@@ -480,12 +557,14 @@ function addRow(item, tbody) {
         resultSentence = resultSentence.substring(slashIndex + 1).trim();
     }
 
+    const label = document.getElementsByClassName('wikibase-title-label')[0].innerText
+    const name = item.triple.startsWith(label) ? item.triple.substring(label.length + 1) : item.triple;
     const $row = $(`
         <tr class="row-${item.result.toLowerCase().replace(/ /g, '-')}">
-            <td><a class="modify-btn">${item.triple}</a></td>
-            <td>${resultSentence}</td>
+            <td><a style="white-space: normal;" class="modify-btn">${name}</a></td>
+            <td><div class="scroll-content">${resultSentence}</div></td>
             <td>${capitalizeFirstLetter(statusMapping[item.result])}</td>
-            <td><a href="${item.url}" target="_blank">${item.url}</a></td>
+            <td><a href="${item.url}" target="_blank" title="${item.url}">${item.url}</a></td>
         </tr>
     `);
 
@@ -680,13 +759,15 @@ function addStyles() {
                 opacity: 0.8;
             }
             .expandable-table th[data-sort="triple"] {
-                width: 30%; /* Fixed width for the 'Triple' column */
+                width: 20%; /* Fixed width for the 'Triple' column */
             }
             .expandable-table th[data-sort="result_sentence"] {
-                width: 40%; /* Fixed width for the 'Result Sentence' column */
+            }
+            .expandable-table th[data-sort="result_status"] {
+                width: 12%; /* Fixed width for the 'Result Sentence' column */
             }
             .expandable-table th:last-child {
-                width: 10%; /* Fixed width for the 'URL' column */
+                width: 20%; /* Fixed width for the 'URL' column */
             }
             .expandable-table td {
                 word-break: break-word;
@@ -709,6 +790,11 @@ function addStyles() {
                 border-top: 5px solid black;
                 margin-left: 5px;
                 transition: transform 0.3s ease;
+            }
+            #prove-pagination {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
             }
 
             /* Rotate the arrow for descending (downward) sort order */
@@ -763,6 +849,11 @@ function addStyles() {
                 border-radius: 50%;
                 background-color: white;
                 transition: all 0.3s;
+            }
+            .scroll-content {
+                max-height: 10rem;
+                overflow-y: auto;
+                display: flex;
             }
             .checkbox:checked + .switch::after {
                 right: 0; 
