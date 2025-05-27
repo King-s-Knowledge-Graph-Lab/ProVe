@@ -260,7 +260,6 @@ function updateProveHealthIndicator(data, qid, container) {
 	$proveContainer.append($proveLink);
 	container.append($proveContainer);
 
-
     // Add button logic
     var $button = $('<button id="prove-action-btn"></button>');
 	    
@@ -311,7 +310,6 @@ function updateProveHealthIndicator(data, qid, container) {
 	            $button.prop('disabled', false).text(buttonText);
 	        });
 	});
-	
 	$proveContainer.append($button);
 }
 
@@ -325,10 +323,10 @@ function addRows(data, tbody) {
 
 function createPagination(data, tbody) {
     const $element = $(`
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 8rem; margin-top: 0.5rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: fit-content; margin-top: 0.5rem;">
             <button id="prevButton">Prev</button>
-            <span id="pageInfo" style="margin: 0;">
-                ${(page + 1) * pageSize} of ${data.length}
+            <span id="pageInfo" style="margin: 0 0.5rem;">
+                ${(page + 1)} of ${Math.ceil(data.length / pageSize)}
             </span>
             <button id="nextButton">Next</button>
         </div>
@@ -337,7 +335,7 @@ function createPagination(data, tbody) {
     $element.find("#prevButton").click(function() {
         if (page === 0);
         else  page--;
-        document.getElementById("pageInfo").innerText = `${(page + 1) * pageSize}/${data.length}`;
+        document.getElementById("pageInfo").innerText = `${(page + 1)} of ${Math.ceil(data.length / pageSize)}`;
         addRows(currentList, tbody);
     })
 
@@ -345,9 +343,9 @@ function createPagination(data, tbody) {
         if (page === Math.ceil(data.length / pageSize) - 1);
         else {
             page++;
-            var displayNumber = (page + 1) * pageSize;
+            var displayNumber = (page + 1);
             if (displayNumber > data.length) displayNumber = data.length;
-            document.getElementById("pageInfo").innerText = `${displayNumber}/${data.length}`;
+            document.getElementById("pageInfo").innerText = `${displayNumber} of ${Math.ceil(data.length / pageSize)}`;
             addRows(currentList, tbody);
         }
     });
@@ -358,7 +356,8 @@ function createPagination(data, tbody) {
 function setPageSize(data, tbody) {
     const $pageSizeInput = $(`
         <div>
-            <select id="pageSizeSelect" style="width: 3rem;">
+            <label for="pageSizeSelect">Items per page:</label>
+            <select id="pageSizeSelect" style="width: 3rem; font-size: 16px;">
             </select>
         </div>
     `)
@@ -388,8 +387,9 @@ function createProveTables(data, container) {
     const $toggleButton = $('<button id="prove-toggle">Show/Hide Reference Results</button>');
     const $filterContainer = $('<div id="prove-filters" style="display: none;"></div>')
     const $tablesContainer = $('<div id="prove-tables" style="display: none;"></div>');
-    const $paginationContainer = $('<div id="prove-pagination"></div>')
+    const $paginationContainer = $('<div id="prove-pagination" style="display: none;"></div>')
 
+    $buttonContainer.append($toggleButton);
     container.append($buttonContainer).append($statsContainer).append($filterContainer);
     container.append($paginationContainer).append($tablesContainer);
 
@@ -468,6 +468,7 @@ function createProveTables(data, container) {
             $filterContainer.slideDown();
             $tablesContainer.slideDown();
             $tablesContainer.children().show();
+            $paginationContainer.slideDown();
         } else {
             $('.prove-category-toggle').hide().removeClass('active');
             $statsContainer.slideUp();
@@ -475,9 +476,9 @@ function createProveTables(data, container) {
             $tablesContainer.slideUp(function() {
                 $tablesContainer.children().hide();
             });
+            $paginationContainer.slideUp();
         }
     });
-    $toggleButton.click();
 }
 
 function transformData(categoryData) {
