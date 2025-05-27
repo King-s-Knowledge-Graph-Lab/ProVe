@@ -9,14 +9,14 @@ else:
     DEVICE = 'cpu'
     print('CUDA NOT AVAILABLE')
 
-CHECKPOINT = 'base/t5-base_13881_val_avg_bleu=68.1000-step_count=5.ckpt'
+CHECKPOINT = '/home/ubuntu/RQV/base/t5-base_13881_val_avg_bleu=68.1000-step_count=5.ckpt'
 MAX_LENGTH = 384
 SEED = 42
 
 
 class VerbModule():
     
-    def __init__(self, override_args: Dict[str, str] = None): 
+    def __init__(self, override_args: Dict[str, str] = None):
         # Model
         if not override_args:
             override_args = {}

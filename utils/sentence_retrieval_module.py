@@ -11,8 +11,8 @@ from utils.logger import logger
 THIS_DIR = pathlib.Path(__file__).parent.absolute()
 ARGS = {
     'batch_size': 32,
-    'bert_pretrain': 'base/bert_base',
-    'checkpoint': 'base/model.best.32.pt',
+    'bert_pretrain': '/home/ubuntu/RQV/base/bert_base',
+    'checkpoint': '/home/ubuntu/RQV/base/model.best.32.pt',
     'dropout': 0.6,
     'bert_hidden_dim': 768,
     'max_len': 384,

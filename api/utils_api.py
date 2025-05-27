@@ -6,7 +6,11 @@ from local_secrets import API_KEY, LOG_PATH, LOG_FILENAME
 
 
 if not os.path.exists(LOG_PATH):
-    os.makedirs(LOG_PATH, exist_ok=True)
+    try:
+        os.makedirs(LOG_PATH, exist_ok=True)
+    except PermissionError:
+        LOG_PATH = "./logs/api/"
+        os.makedirs(LOG_PATH, exist_ok=True)
 
 logger = logging.getLogger("api")
 logger.setLevel(logging.ERROR)

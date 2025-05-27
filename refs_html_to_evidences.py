@@ -12,7 +12,7 @@ from utils.logger import logger
 
 class HTMLSentenceProcessor:
     def __init__(self):
-        nltk.download('punkt', quiet=True)
+        nltk.download('punkt', quiet=True, download_dir="/home/ubuntu/nltk_data/")
         self.logger = logger
         self.h = html2text.HTML2Text()
         self.h.ignore_links = True
@@ -200,21 +200,30 @@ class EvidenceSelector:
             for idx in top_k_indices:
                 score = float(similarities[idx])
                 sentence = ref_sentences[idx]
-                results.append({
-                    'reference_id': ref_id,
-                    'claim_id': claim_row['claim_id'],
-                    'claim': claim_text,
-                    'sentence': sentence,
-                    'similarity_score': score,
-                    'sentence_id': f"{ref_id}_{idx}",
-                    'qid': claim_row['qid'],
-                    'property_id': claim_row['property_id'],
-                    'object_id': claim_row['object_id'],
-                    'entity_label': claim_row['entity_label'],
-                    'property_label': claim_row['property_label'],
-                    'object_label': claim_row['object_label']
-                })
-        
+                try:
+                    results.append({
+                        'reference_id': ref_id,
+                        'claim_id': claim_row['claim_id'],
+                        'claim': claim_text,
+                        'sentence': sentence,
+                        'similarity_score': score,
+                        'sentence_id': f"{ref_id}_{idx}",
+                        'qid': claim_row['qid'],
+                        'property_id': claim_row['property_id'],
+                        'object_id': claim_row['object_id'],
+                        'entity_label': claim_row['entity_label'],
+                        'property_label': claim_row['property_label'],
+                        'object_label': claim_row['object_label']
+                    })
+                except KeyError:
+                    results.append({
+                        'reference_id': ref_id,
+                        'claim': claim_text,
+                        'sentence': sentence,
+                        'similarity_score': score,
+                        'sentence_id': f"{ref_id}_{idx}",
+                    })
+
         return pd.DataFrame(results)
 
     def process_evidence(self, sentences_df: pd.DataFrame, parser_result: Dict) -> pd.DataFrame:

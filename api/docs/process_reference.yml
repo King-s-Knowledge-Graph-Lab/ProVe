@@ -1,0 +1,70 @@
+Request processing for a specific reference.
+This endpoint processes a reference sentence within a provided URL.
+---
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - name: body
+    in: body
+    required: true
+    schema:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The URL where the sentence is found.
+          example: "https://example.com/article"
+        sentence:
+          type: string
+          description: The sentence to be processed.
+          example: "This is the sentence to analyze."
+      required:
+        - url
+        - sentence
+responses:
+  202:
+    description: Request successfully received and being processed.
+    schema:
+      type: object
+      properties:
+        request_result:
+          type: string
+          description: The result of the request.
+          example: "success"
+        message:
+          type: string
+          description: A message confirming the task creation.
+          example: "Processing started for sentence in URL https://example.com/article"
+        url:
+          type: string
+          description: The URL associated with the request.
+          example: "https://example.com/article"
+        sentence:
+          type: string
+          description: The sentence being processed.
+          example: "This is the sentence to analyze."
+  400:
+    description: Bad Request - Missing or invalid parameters.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing 'sentence' or 'url' parameter"
+  500:
+    description: Internal Server Error
+    schema:
+      type: object
+      properties:
+        request_result:
+          type: string
+          example: "error"
+        message:
+          type: string
+          example: "An error occurred while processing your request"
+        error:
+          type: string
+          example: "Detailed error message"
+

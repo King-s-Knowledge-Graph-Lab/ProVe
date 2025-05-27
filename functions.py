@@ -129,7 +129,7 @@ def GetItem(target_id):
             for content in html_contents:
                 item = {
                     'qid': content['object_id'],
-                    'property_id': content['property_id'],
+             'property_id': content['property_id'],
                     'url': content['url'],
                     'triple': f"{content['entity_label']} {content['property_label']} {content['object_label']}"
                 }
@@ -397,7 +397,7 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
         if not update or (update and summary is None):
             mongo_handler.summary_collection.insert_one({'_id': target_id, **result})
         else:
-            mongo_handler.summary_collection.update_one({'_id': target_id, **result})
+            mongo_handler.summary_collection.update_one({'_id': target_id}, {'$set': result})
     else:
         result.pop('_id', None)
 
@@ -485,7 +485,7 @@ def get_history(
 #Examples = Q5820 : error/ Q5208 : good/ Q42220 : None.
 def comprehensive_results(target_id):
     """Get comprehensive results for a target ID including reference score and grouped results"""
-    response = GetItem(target_id)
+    response = get_item(target_id)
 
     if not isinstance(response, list) or not response:
         return None
@@ -769,8 +769,74 @@ def get_config_as_json():
         logger.error("Config file not found: %s", e)
         return None
 
+def process_reference(url: str, claim: str):
+    import nltk
+    import requests
+    import pandas as pd
+    import ProVe_main_process
+    from refs_html_collection import HTMLFetcher
+    from refs_html_to_evidences import HTMLSentenceProcessor, EvidenceSelector
+    from claim_entailment import ClaimEntailmentChecker
+
+    nltk.data.path.append('/home/ubuntu/nltk_data/')
+
+    model = ProVe_main_process.initialize_models()
+    text_entailment, sentence_retrieval, verb_module = model
+
+    selector = EvidenceSelector(
+        sentence_retrieval=sentence_retrieval,
+        verb_module=verb_module,
+    )
+    checker = ClaimEntailmentChecker(text_entailment=text_entailment)
+
+    fetcher = HTMLFetcher(config_path="/home/ubuntu/RQV/config.yaml")
+    html_result = requests.get(url, timeout=fetcher.timeout, headers=fetcher.headers)
+    result = {
+        "status": [html_result.status_code],
+        "html": [html_result.text],
+        "url": [url],
+        "reference_id": ["Q42"],
+    }
+    source = {
+        "verbalisation_unks_replaced_then_dropped": [claim],
+        "claims_refs": [url],
+        "reference_id": ["Q42"],
+    }
+    source_df = pd.DataFrame.from_dict(source)
+    html_df = pd.DataFrame.from_dict(result)
+
+    processor = HTMLSentenceProcessor()
+    sentence_df = processor.process_html_to_sentences(html_df)
+
+    evidence_df = selector.select_relevant_sentences(source_df, sentence_df)
+
+    df = checker.process_entailment(evidence_df, html_df, "Q42")
+
+    if "SUPPORTS" in df["result"].to_list():
+        result = df.loc[
+            (df['result'] == 'SUPPORTS') &
+            (df['text_entailment_score'] == df.loc[df['result'] == 'SUPPORTS', 'text_entailment_score'].max())
+        ]
+    elif "NOT ENOUGH INFO" in df["result"].to_list():
+        result = df.loc[
+            (df['result'] == 'NOT ENOUGH INFO') &
+            (df['text_entailment_score'] == df.loc[df['result'] == 'NOT ENOUGH INFO', 'text_entailment_score'].max())
+        ]
+    else:
+        result = df.loc[
+            (df['result'] == 'REFUTES') &
+            (df['text_entailment_score'] == df.loc[df['result'] == 'REFUTES', 'text_entailment_score'].max())
+        ]
+
+    result = result.reset_index(drop=True).to_dict()
+    return {
+        "score": result["text_entailment_score"][0],
+        "sentence": result["result_sentence"][0],
+        "similarity": result["similarity_score"][0],
+        "result": result["result"][0],
+    }
+
 
 if __name__ == "__main__":
     #requestItemProcessing('Q44')
-    generation_worklists()
-    pass
+    process_reference("https://discovering.beer/what-beer-is-made-from/hops/", "beer no part(s) hops")

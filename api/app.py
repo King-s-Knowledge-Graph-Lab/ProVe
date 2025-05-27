@@ -538,6 +538,18 @@ def subscribe_newsletter():
     return make_response('', 204)
 
 
+@app.route("/api/items/processReference", methods=["POST"])
+def process_reference():
+    data = request.get_json()
+    url = data.get("url")
+    sentence = data.get("sentence")
+
+    try:
+        result = functions.process_reference(url, sentence)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": "Something went wrong"}), 400
+
 
 
 if __name__ == '__main__':
