@@ -147,7 +147,7 @@ function updateProveHealthIndicator(data, qid, container) {
     var healthValue = data.Reference_score;
     const totalStatements = calculateStatementStats().total;
 
-    var $proveContainer = $('<div class="prove-container"></div>')
+    var $proveContainer = $('<div class="prove-health-container"></div>')
 
     if (typeof healthValue === 'number') {
         healthValue = healthValue.toFixed(2);
@@ -311,6 +311,7 @@ function updateProveHealthIndicator(data, qid, container) {
 	        });
 	});
 	$proveContainer.append($button);
+    return $proveContainer;
 }
 
 function addRows(data, tbody) {
@@ -381,7 +382,7 @@ function setPageSize(data, tbody) {
 
 }
 
-function createProveTables(data, container) {
+function createProveTables(data, container, healthContainer) {
     const $statsContainer = displayStatementStats(data).hide();
     const $buttonContainer = $('<div id="prove-buttons"></div>');
     const $toggleButton = $('<button id="prove-toggle">Show/Hide Reference Results</button>');
@@ -390,7 +391,8 @@ function createProveTables(data, container) {
     const $paginationContainer = $('<div id="prove-pagination" style="display: none;"></div>')
 
     $buttonContainer.append($toggleButton);
-    container.append($buttonContainer).append($statsContainer).append($filterContainer);
+    healthContainer.append($buttonContainer);
+    container.append($statsContainer).append($filterContainer);
     container.append($paginationContainer).append($tablesContainer);
 
 
@@ -713,6 +715,10 @@ function addStyles() {
 			.prove-container {
                 margin-bottom: 1rem;
 			}
+            .prove-health-container {
+                display: flex;
+                align-items: center;
+            }
 			.health-indicator {
 			    margin-top: 5px; /* Moves the health indicator slightly upward */
 			    display: inline-flex;
@@ -721,7 +727,6 @@ function addStyles() {
 			}
 			#prove-action-btn {
 			    margin-left: 10px;
-			    margin-top: 10px; 
 			    padding: 5px 10px;
 			    border: 1px solid #a2a9b1;
 			    border-radius: 5px;
@@ -1101,8 +1106,8 @@ function( mw, $ ) {
                 })
                 .then(data => {
                     const $container = $('<div id="prove-container"></div>');
-                    updateProveHealthIndicator(data, entityID, $container);
-                    createProveTables(data, $container);
+                    let healthContainer = updateProveHealthIndicator(data, entityID, $container);
+                    createProveTables(data, $container, healthContainer);
                     labelsParent.append($container);
                 })
                 .catch(error => {
