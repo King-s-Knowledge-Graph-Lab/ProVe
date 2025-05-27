@@ -683,6 +683,72 @@ def generation_worklist_pagePile():
     data_dict = df.to_dict(orient='records')
     return json.dumps(data_dict, ensure_ascii=False, indent=4)
 
+def process_reference(url: str, claim: str) -> Dict[str, Any]:
+    import nltk
+    import requests
+    import pandas as pd
+    import ProVe_main_process
+    from refs_html_collection import HTMLFetcher
+    from refs_html_to_evidences import HTMLSentenceProcessor, EvidenceSelector
+    from claim_entailment import ClaimEntailmentChecker
+
+    nltk.data.path.append('/home/ubuntu/nltk_data/')
+
+    model = ProVe_main_process.initialize_models()
+    text_entailment, sentence_retrieval, verb_module = model
+
+    selector = EvidenceSelector(
+        sentence_retrieval=sentence_retrieval,
+        verb_module=verb_module,
+    )
+    checker = ClaimEntailmentChecker(text_entailment=text_entailment)
+
+    fetcher = HTMLFetcher(config_path="/home/ubuntu/RQV/config.yaml")
+    html_result = requests.get(url, timeout=fetcher.timeout, headers=fetcher.headers)
+    result = {
+        "status": [html_result.status_code],
+        "html": [html_result.text],
+        "url": [url],
+        "reference_id": ["Q42"],
+    }
+    source = {
+        "verbalisation_unks_replaced_then_dropped": [claim],
+        "claims_refs": [url],
+        "reference_id": ["Q42"],
+    }
+    source_df = pd.DataFrame.from_dict(source)
+    html_df = pd.DataFrame.from_dict(result)
+
+    processor = HTMLSentenceProcessor()
+    sentence_df = processor.process_html_to_sentences(html_df)
+
+    evidence_df = selector.select_relevant_sentences(source_df, sentence_df)
+
+    df = checker.process_entailment(evidence_df, html_df, "Q42")
+
+    if "SUPPORTS" in df["result"].to_list():
+        result = df.loc[
+            (df['result'] == 'SUPPORTS') &
+            (df['text_entailment_score'] == df.loc[df['result'] == 'SUPPORTS', 'text_entailment_score'].max())
+        ]
+    elif "NOT ENOUGH INFO" in df["result"].to_list():
+        result = df.loc[
+            (df['result'] == 'NOT ENOUGH INFO') &
+            (df['text_entailment_score'] == df.loc[df['result'] == 'NOT ENOUGH INFO', 'text_entailment_score'].max())
+        ]
+    else:
+        result = df.loc[
+            (df['result'] == 'REFUTES') &
+            (df['text_entailment_score'] == df.loc[df['result'] == 'REFUTES', 'text_entailment_score'].max())
+        ]
+
+    result = result.reset_index(drop=True).to_dict()
+    return {
+        "score": result["text_entailment_score"][0],
+        "sentence": result["result_sentence"][0],
+        "similarity": result["similarity_score"][0],
+        "result": result["result"][0],
+    }
 
 def plot_status():
     def extract_hour(x):

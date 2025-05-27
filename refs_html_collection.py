@@ -43,12 +43,11 @@ class HTMLFetcher:
     def get_error_message(self, status_code: int) -> str:
         """Get descriptive error message for HTTP status code"""
         return self.HTTP_ERROR_MESSAGES.get(status_code, "Unknown Error")
-
     def fetch_html_with_requests(self, url: str) -> str:
         """Fetch HTML content using requests library"""
         try:
             response = requests.get(
-                url, 
+                url,
                 timeout=self.timeout,
                 headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             )
