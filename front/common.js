@@ -679,20 +679,21 @@ function addStyles() {
             #prove-buttons {
                 display: flex;
                 flex-wrap: nowrap;
-                margin-bottom: 10px;
+                margin-bottom: 0.5rem;
+                margin-top: 0.5rem;
                 justify-content: space-between; /* Distribute buttons evenly */
-                width: 100%; /* Ensure buttons match the width of the table */
+                width: fit-content; /* Ensure buttons match the width of the table */
                 gap: 5px; /* Remove gaps to match the table width */
                 box-sizing: border-box; /* Include padding and borders in width calculation */
             }
             #prove-toggle, .prove-category-toggle { 
                 flex: 1; /* Make buttons take equal space */
-                padding: 10px;
+                padding: 5px 10px;
                 border: 1px solid #a2a9b1;
-                border-radius: 2px;
+                font-size: 14px;
+                border-radius: 5px;
                 cursor: pointer;
                 text-align: center;
-                height: 50px; /* Fixed height for all buttons */
                 background-color: #f8f9fa;
                 box-sizing: border-box; /* Include padding and borders in the width */
             }
@@ -726,7 +727,8 @@ function addStyles() {
 			    position: relative;
 			}
 			#prove-action-btn {
-			    margin-left: 10px;
+			    margin-left: 0.5rem;
+			    margin-right: 0.5rem;
 			    padding: 5px 10px;
 			    border: 1px solid #a2a9b1;
 			    border-radius: 5px;
