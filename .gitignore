@@ -161,6 +161,7 @@ cython_debug/
 .DS_Store
 
 base/
+db/
 rqvenv/
 entity_cache.p
 wikidata_claims_refs_parsed.db
@@ -175,3 +176,7 @@ output.log.1
 error.log2.gz
 output.log2.gz
 tester.py
+api/secrets.py
+utils/secrets.py
+db/
+tmp/

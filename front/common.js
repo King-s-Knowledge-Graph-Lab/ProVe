@@ -147,7 +147,7 @@ function updateProveHealthIndicator(data, qid, container) {
     var healthValue = data.Reference_score;
     const totalStatements = calculateStatementStats().total;
 
-    var $proveContainer = $('<div class="prove-container"></div>')
+    var $proveContainer = $('<div class="prove-health-container"></div>')
 
     if (typeof healthValue === 'number') {
         healthValue = healthValue.toFixed(2);
@@ -260,7 +260,6 @@ function updateProveHealthIndicator(data, qid, container) {
 	$proveContainer.append($proveLink);
 	container.append($proveContainer);
 
-
     // Add button logic
     var $button = $('<button id="prove-action-btn"></button>');
 	    
@@ -311,8 +310,8 @@ function updateProveHealthIndicator(data, qid, container) {
 	            $button.prop('disabled', false).text(buttonText);
 	        });
 	});
-	
 	$proveContainer.append($button);
+    return $proveContainer;
 }
 
 function addRows(data, tbody) {
@@ -325,10 +324,10 @@ function addRows(data, tbody) {
 
 function createPagination(data, tbody) {
     const $element = $(`
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 8rem; margin-top: 0.5rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: fit-content; margin-top: 0.5rem;">
             <button id="prevButton">Prev</button>
-            <span id="pageInfo" style="margin: 0;">
-                ${(page + 1) * pageSize} of ${data.length}
+            <span id="pageInfo" style="margin: 0 0.5rem;">
+                ${(page + 1)} of ${Math.ceil(data.length / pageSize)}
             </span>
             <button id="nextButton">Next</button>
         </div>
@@ -337,7 +336,7 @@ function createPagination(data, tbody) {
     $element.find("#prevButton").click(function() {
         if (page === 0);
         else  page--;
-        document.getElementById("pageInfo").innerText = `${(page + 1) * pageSize}/${data.length}`;
+        document.getElementById("pageInfo").innerText = `${(page + 1)} of ${Math.ceil(data.length / pageSize)}`;
         addRows(currentList, tbody);
     })
 
@@ -345,9 +344,9 @@ function createPagination(data, tbody) {
         if (page === Math.ceil(data.length / pageSize) - 1);
         else {
             page++;
-            var displayNumber = (page + 1) * pageSize;
+            var displayNumber = (page + 1);
             if (displayNumber > data.length) displayNumber = data.length;
-            document.getElementById("pageInfo").innerText = `${displayNumber}/${data.length}`;
+            document.getElementById("pageInfo").innerText = `${displayNumber} of ${Math.ceil(data.length / pageSize)}`;
             addRows(currentList, tbody);
         }
     });
@@ -358,7 +357,8 @@ function createPagination(data, tbody) {
 function setPageSize(data, tbody) {
     const $pageSizeInput = $(`
         <div>
-            <select id="pageSizeSelect" style="width: 3rem;">
+            <label for="pageSizeSelect">Items per page:</label>
+            <select id="pageSizeSelect" style="width: 3rem; font-size: 16px;">
             </select>
         </div>
     `)
@@ -382,15 +382,17 @@ function setPageSize(data, tbody) {
 
 }
 
-function createProveTables(data, container) {
+function createProveTables(data, container, healthContainer) {
     const $statsContainer = displayStatementStats(data).hide();
     const $buttonContainer = $('<div id="prove-buttons"></div>');
     const $toggleButton = $('<button id="prove-toggle">Show/Hide Reference Results</button>');
     const $filterContainer = $('<div id="prove-filters" style="display: none;"></div>')
     const $tablesContainer = $('<div id="prove-tables" style="display: none;"></div>');
-    const $paginationContainer = $('<div id="prove-pagination"></div>')
+    const $paginationContainer = $('<div id="prove-pagination" style="display: none;"></div>')
 
-    container.append($buttonContainer).append($statsContainer).append($filterContainer);
+    $buttonContainer.append($toggleButton);
+    healthContainer.append($buttonContainer);
+    container.append($statsContainer).append($filterContainer);
     container.append($paginationContainer).append($tablesContainer);
 
 
@@ -468,6 +470,7 @@ function createProveTables(data, container) {
             $filterContainer.slideDown();
             $tablesContainer.slideDown();
             $tablesContainer.children().show();
+            $paginationContainer.slideDown();
         } else {
             $('.prove-category-toggle').hide().removeClass('active');
             $statsContainer.slideUp();
@@ -475,9 +478,9 @@ function createProveTables(data, container) {
             $tablesContainer.slideUp(function() {
                 $tablesContainer.children().hide();
             });
+            $paginationContainer.slideUp();
         }
     });
-    $toggleButton.click();
 }
 
 function transformData(categoryData) {
@@ -676,20 +679,21 @@ function addStyles() {
             #prove-buttons {
                 display: flex;
                 flex-wrap: nowrap;
-                margin-bottom: 10px;
+                margin-bottom: 0.5rem;
+                margin-top: 0.5rem;
                 justify-content: space-between; /* Distribute buttons evenly */
-                width: 100%; /* Ensure buttons match the width of the table */
+                width: fit-content; /* Ensure buttons match the width of the table */
                 gap: 5px; /* Remove gaps to match the table width */
                 box-sizing: border-box; /* Include padding and borders in width calculation */
             }
             #prove-toggle, .prove-category-toggle { 
                 flex: 1; /* Make buttons take equal space */
-                padding: 10px;
+                padding: 5px 10px;
                 border: 1px solid #a2a9b1;
-                border-radius: 2px;
+                font-size: 14px;
+                border-radius: 5px;
                 cursor: pointer;
                 text-align: center;
-                height: 50px; /* Fixed height for all buttons */
                 background-color: #f8f9fa;
                 box-sizing: border-box; /* Include padding and borders in the width */
             }
@@ -712,6 +716,10 @@ function addStyles() {
 			.prove-container {
                 margin-bottom: 1rem;
 			}
+            .prove-health-container {
+                display: flex;
+                align-items: center;
+            }
 			.health-indicator {
 			    margin-top: 5px; /* Moves the health indicator slightly upward */
 			    display: inline-flex;
@@ -719,8 +727,8 @@ function addStyles() {
 			    position: relative;
 			}
 			#prove-action-btn {
-			    margin-left: 10px;
-			    margin-top: 10px; 
+			    margin-left: 0.5rem;
+			    margin-right: 0.5rem;
 			    padding: 5px 10px;
 			    border: 1px solid #a2a9b1;
 			    border-radius: 5px;
@@ -1100,8 +1108,8 @@ function( mw, $ ) {
                 })
                 .then(data => {
                     const $container = $('<div id="prove-container"></div>');
-                    updateProveHealthIndicator(data, entityID, $container);
-                    createProveTables(data, $container);
+                    let healthContainer = updateProveHealthIndicator(data, entityID, $container);
+                    createProveTables(data, $container, healthContainer);
                     labelsParent.append($container);
                 })
                 .catch(error => {
