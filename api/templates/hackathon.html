@@ -45,13 +45,24 @@
         {% endif %}
 
         <h2>Task Description</h2>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+        <p>
+            We are a group of enthusiastic researchers/developers working on improving the quality of data in Wikidata.
+            We have developed a tool called ProVe to support verifying references of Wikidata statements.
+            ProVe uses natural language models and other AI features to analyse the support of these statements 
+            (<a href="https://www.wikidata.org/wiki/Wikidata:ProVe" target="_blank">https://www.wikidata.org/wiki/Wikidata:ProVe</a>).
+            In this session we will describe ProVe’s Web API and its features, and how it can support the development of desktop apps and dashboards that help tracking the quality of references in Wikidata.
+            We welcome new ideas and proofs-of-concept based on the API, as well as suggestions for new functionality.
+            Some potential applications are described in the challenges section of
+            <a href="https://www.wikidata.org/wiki/Wikidata:WikiProject_Reference_Verification#ProVe_Tools" target="_blank">https://www.wikidata.org/wiki/Wikidata:WikiProject_Reference_Verification#ProVe_Tools</a>.
+        </p>
 
         <h3>Examples</h3>
         <ul>
-            <li>Lorem ipsum example one</li>
-            <li>Lorem ipsum example two</li>
-            <li>Lorem ipsum example three</li>
+            <li>Create dashboard to maintain a list of items</li>
+            <li>Analyse all items for a certain domain</li>
+            <li>Analyse all recent requested items</li>
+            <li>A new ProVe interface</li>
+            <li>A dashboard for the history of an item</li>
         </ul>
 
         {% if not user %}

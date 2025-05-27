@@ -67,8 +67,8 @@ class SummarizationModule(BaseTransformer):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         #use_task_specific_params(self.model, "summarization")
 
-        self.metrics_save_path = Path('base') / "metrics.json"
-        self.hparams_save_path = Path('base') / "hparams.pkl"
+        self.metrics_save_path = Path('/home/ubuntu/RQV/base') / "metrics.json"
+        self.hparams_save_path = Path('/home/ubuntu/RQV/base') / "hparams.pkl"
         pickle_save(self.hparams, self.hparams_save_path)
         self.step_count = -2
         self.metrics = defaultdict(list)

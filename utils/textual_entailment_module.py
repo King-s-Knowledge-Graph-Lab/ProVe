@@ -28,8 +28,8 @@ class TextualEntailmentModule():
 
     def __init__(
         self,
-        model_path = 'base/models/BERT_FEVER_v4_model_PBT',
-        tokenizer_path = 'base/models/BERT_FEVER_v4_tok_PBT'
+        model_path = '/home/ubuntu/RQV/base/models/BERT_FEVER_v4_model_PBT',
+        tokenizer_path = '/home/ubuntu/RQV/base/models/BERT_FEVER_v4_tok_PBT'
         ):
         self.tokenizer = BertTokenizer.from_pretrained(
             tokenizer_path
