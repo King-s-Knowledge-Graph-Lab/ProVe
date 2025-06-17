@@ -1,15 +1,16 @@
 from datetime import datetime
 import time
 from threading import Lock
+from typing import List
 import random
 import signal
 import sys
 
 import nltk
-import pandas as pd
-from pymongo import MongoClient
+from pymongo import collection
 import schedule
 from SPARQLWrapper import SPARQLWrapper, JSON
+from torch.nn import Module
 import yaml
 
 from background_processing import (
@@ -19,289 +20,13 @@ from background_processing import (
 )
 import ProVe_main_process
 from utils.logger import logger
+from utils.mongo_handler import MongoDBHandler
 
 try:
     nltk.download('punkt_tab')
 except Exception as e:
     logger.error(f"Error downloading nltk data: {e}")
 
-
-class MongoDBHandler:
-    def __init__(self, connection_string="mongodb://localhost:27017/", max_retries=3):
-        self.connection_string = connection_string
-        self.max_retries = max_retries
-        self.connect()
-    
-    def connect(self):
-        for attempt in range(self.max_retries):
-            try:
-                self.client = MongoClient(self.connection_string)
-                self.client.server_info()  # Test connection
-                self.db = self.client['wikidata_verification']
-                self.html_collection = self.db['html_content']
-                self.entailment_collection = self.db['entailment_results']
-                self.stats_collection = self.db['parser_stats']
-                self.status_collection = self.db['status']
-                self.summary_collection = self.db['summary']
-                logger.info("Successfully connected to WikiData verification MongoDB")
-                return
-            except Exception as e:
-                logger.error(f"MongoDB connection attempt {attempt + 1} failed: {e}")
-                if attempt == self.max_retries - 1:
-                    logger.error("Failed to connect to MongoDB")
-                    raise
-                time.sleep(5)  # Wait before retry
-
-    def ensure_connection(self):
-        """Ensure MongoDB connection is alive, reconnect if needed"""
-        try:
-            self.client.server_info()
-        except:
-            logger.error("MongoDB connection lost, attempting to reconnect...")
-            self.connect()
-
-    def save_html_content(self, html_df):
-        """Save HTML content data with task_id"""
-        try:
-            if html_df.empty:
-                logger.warning("html_df is empty")
-                return
-
-            # Remvoing html data for storage efficiency 
-            html_df_without_html = html_df.drop('html', axis=1)
-
-            logger.info(f"Attempting to save {len(html_df_without_html)} HTML records")
-            records = html_df_without_html.to_dict('records')
-            
-            for record in records:
-                try:
-                    if 'reference_id' not in record:
-                        logger.warning(f"Record missing reference_id: {record}")
-                        continue
-                    
-                    # Convert pandas Timestamp to datetime
-                    if 'fetch_timestamp' in record and isinstance(record['fetch_timestamp'], pd.Timestamp):
-                        record['fetch_timestamp'] = record['fetch_timestamp'].to_pydatetime()
-                    
-                    # Add save timestamp
-                    record['save_timestamp'] = datetime.now()
-                    
-                    result = self.html_collection.update_one(
-                        {
-                            'reference_id': record['reference_id'],
-                            'task_id': record['task_id']
-                        },
-                        {'$set': record},
-                        upsert=True
-                    )
-
-                    logger.info(
-                        f"Updated HTML document with reference_id {record['reference_id']}: "
-                        f"matched={result.matched_count}, modified={result.modified_count}, "
-                        f"upserted_id={result.upserted_id}"
-                    )
-                          
-                except Exception as e:
-                    logger.error(f"Error saving HTML record: {record}")
-                    logger.error(f"Error details: {e}")
-                    
-        except Exception as e:
-            logger.error(f"Error in save_html_content: {e}")
-            raise
-
-    def save_entailment_results(self, entailment_df):
-        """Save entailment results with task_id"""
-        try:
-            if entailment_df.empty:
-                logger.warning("entailment_df is empty")
-                return
-
-            logger.info(f"Attempting to save {len(entailment_df)} entailment records")
-            records = entailment_df.to_dict('records')
-            
-            for record in records:
-                try:
-                    # Convert timestamp string to datetime object
-                    if 'processed_timestamp' in record:
-                        record['processed_timestamp'] = datetime.strptime(
-                            record['processed_timestamp'], 
-                            '%Y-%m-%dT%H:%M:%S.%f'
-                        )
-                    
-                    # Add save timestamp
-                    record['save_timestamp'] = datetime.now()
-                    
-                    # Insert new document without checking for duplicates
-                    result = self.entailment_collection.insert_one(record)
-                    logger.info(
-                        f"Inserted new entailment document with reference_id {record['reference_id']}: "
-                        f"inserted_id={result.inserted_id}"
-                    )
-                    
-                except Exception as e:
-                    logger.error(f"Error saving entailment record: {record}")
-                    logger.error(f"Error details: {e}")
-                    
-        except Exception as e:
-            logger.error(f"Error in save_entailment_results: {e}")
-            raise
-
-    def save_parser_stats(self, stats_dict):
-        """Save parser statistics with task_id"""
-        try:
-            # Convert Pandas Timestamp to datetime
-            if isinstance(stats_dict.get('parsing_start_timestamp'), pd.Timestamp):
-                stats_dict['parsing_start_timestamp'] = stats_dict['parsing_start_timestamp'].to_pydatetime()
-            
-            # Add save timestamp
-            stats_dict['save_timestamp'] = datetime.now()
-            
-            result = self.stats_collection.update_one(
-                {
-                    'entity_id': stats_dict['entity_id'],
-                    'task_id': stats_dict['task_id']
-                },
-                {'$set': stats_dict},
-                upsert=True
-            )
-
-            logger.info(f"Updated parser stats for entity {stats_dict['entity_id']}")
-            
-        except Exception as e:
-            logger.error(f"Error in save_parser_stats: {e}")
-            raise
-
-    def save_status(self, status_dict):
-        """Save task status information to MongoDB"""
-        try:
-            # List of timestamp fields to process
-            timestamp_fields = [
-                'requested_timestamp',
-                'processing_start_timestamp',
-                'completed_timestamp'
-            ]
-
-            # Convert string timestamps to datetime objects
-            for field in timestamp_fields:
-                if status_dict.get(field) and status_dict[field] != 'null':
-                    if isinstance(status_dict[field], str):
-                        status_dict[field] = datetime.strptime(
-                            status_dict[field].rstrip('Z'),
-                            '%Y-%m-%dT%H:%M:%S.%f'
-                        )
-
-            # Add last update timestamp
-            status_dict['last_updated'] = datetime.now()
-
-            # Find existing document by task_id and qid
-            existing_doc = self.status_collection.find_one({
-                'task_id': status_dict['task_id'],
-                'qid': status_dict['qid']
-            })
-
-            if existing_doc:
-                # Update existing document
-                result = self.status_collection.update_one(
-                    {
-                        'task_id': status_dict['task_id'],
-                        'qid': status_dict['qid']
-                    },
-                    {'$set': status_dict}
-                )
-                logger.info(
-                    f"Updated status for task {status_dict['task_id']}: "
-                    f"matched={result.matched_count}, modified={result.modified_count}"
-                )
-            else:
-                # Insert new document
-                result = self.status_collection.insert_one(status_dict)
-                logger.info(
-                    f"Created new status for task {status_dict['task_id']}: "
-                    f"inserted_id={result.inserted_id}"
-                )
-
-        except Exception as e:
-            logger.error(f"Error in save_status: {e}")
-            raise
-
-    def reset_database(self):
-        """Reset all collections in the database"""
-        try:
-            self.html_collection.drop()
-            self.entailment_collection.drop()
-            self.stats_collection.drop()
-            self.status_collection.drop()
-            
-            logger.info("All collections have been reset successfully")
-            
-        except Exception as e:
-            logger.error(f"Error resetting database: {e}")
-            raise
-
-    def get_next_user_request(self):
-        """
-        Get the next pending user request from status collection
-        Returns a dictionary with request information or None if no requests found
-        """
-        try:
-            # Find the oldest user request that hasn't been processed
-            pending_request = self.status_collection.find_one(
-                {
-                    'request_type': 'userRequested',
-                    'status': 'in queue'
-                },
-                sort=[('requested_timestamp', 1)]  # Get oldest request first
-            )
-            
-            if pending_request:
-                # Update status to processing and add processing start timestamp
-                status_dict = {
-                    'qid': pending_request['qid'],
-                    'task_id': pending_request['task_id'],
-                    'status': 'processing',
-                    'algo_version': pending_request.get('algo_version', '1.0'),
-                    'request_type': pending_request['request_type'],
-                    'requested_timestamp': pending_request['requested_timestamp'],
-                    'processing_start_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-                    'completed_timestamp': 'null'
-                }
-                
-                # Update the document in MongoDB
-                self.save_status(status_dict)
-                
-                return status_dict
-            
-            # If no userRequested found, get any request with status 'in queue'
-            fallback_request = self.status_collection.find_one(
-                {
-                    'status': 'in queue'
-                },
-                sort=[('requested_timestamp', 1)]  # Get oldest request first
-            )
-            
-            if fallback_request:
-                # Update status to processing and add processing start timestamp
-                status_dict = {
-                    'qid': fallback_request['qid'],
-                    'task_id': fallback_request['task_id'],
-                    'status': 'processing',
-                    'algo_version': fallback_request.get('algo_version', '1.0'),
-                    'request_type': fallback_request['request_type'],
-                    'requested_timestamp': fallback_request['requested_timestamp'],
-                    'processing_start_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-                    'completed_timestamp': 'null'
-                }
-                
-                # Update the document in MongoDB
-                self.save_status(status_dict)
-                
-                return status_dict
-
-            return None  # No requests found
-            
-        except Exception as e:
-            logger.error(f"Error getting next user request: {e}")
-            return None
 
 class RandomItemCollector:
     def __init__(self):
@@ -341,11 +66,19 @@ class RandomItemCollector:
         return []
 
 class ProVeService:
-    def __init__(self, config_path):
+    def __init__(
+        self,
+        config_path,
+        priority_queue: str,
+        secondary_queue: List[str] = None
+    ) -> None:
         self.config = self._load_config(config_path)
         self.running = True
         self.task_lock = Lock()
         self.setup_signal_handlers()
+        self.models: List[Module] = None
+        self.priority_queue = priority_queue
+        self.secondary_queue = secondary_queue or []
         
         # Schedule settings
         schedule.every().day.at("02:00").do(self.run_top_viewed_items)
@@ -374,16 +107,29 @@ class ProVeService:
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                print("Attempting to initialize resources...")
                 logger.info("Attempting to initialize resources...")
                 self.mongo_handler = MongoDBHandler()
                 logger.info("WikiDataMongoDB connection successful")
-                
 
-                self.models = ProVe_main_process.initialize_models()
+                logger.info("Initializing queues...")
+                self.priority_queue = getattr(self.mongo_handler, self.priority_queue, None)
+                if self.priority_queue is None:
+                    raise ValueError(f"Priority queue '{self.priority_queue}' not found in MongoDBHandler")
+                secondary_queues = [getattr(self.mongo_handler, queue) for queue in self.secondary_queue]
+                if len(secondary_queues) != len(self.secondary_queue):
+                    raise ValueError(f"One or more secondary queues not found in MongoDBHandler: {self.secondary_queue}")
+                self.secondary_queues = secondary_queues
+                logger.info("Queues initialized successfully")
+                
+                print("Initializing models...")
+                # self.models = ProVe_main_process.initialize_models()
                 logger.info("Models initialized successfully")
+                print("Resources initialized successfully")
                 
                 return True
             except Exception as e:
+                print(f"Initialization attempt {attempt + 1} failed: {str(e)}")
                 logger.error(f"Initialization attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
                     logger.error("Failed to initialize resources")
@@ -424,12 +170,12 @@ class ProVeService:
                 status_dict['error_message'] = str(e)
                 self.mongo_handler.save_status(status_dict)
 
-    def retry_processing(self):
+    def retry_processing(self, queue: collection) -> None:
         """Retry processing for items stuck in processing state."""
         retry_limit = 3
 
         # Find items that are in processing state
-        stuck_items = self.mongo_handler.status_collection.find({
+        stuck_items = queue.find({
             'status': 'processing'
         })
 
@@ -438,7 +184,7 @@ class ProVeService:
             if item.get('retry_count', 0) < retry_limit:
                 logger.info(f"Retrying QID {item['qid']}...")
                 # Increment the retry count
-                self.mongo_handler.status_collection.update_one(
+                queue.update_one(
                     {'_id': item['_id']},
                     {'$set': {'retry_count': item.get('retry_count', 0) + 1}}
                 )
@@ -447,7 +193,7 @@ class ProVeService:
             else:
                 logger.error(f"QID {item['qid']} has reached the maximum retry limit. Updating status to error.")
                 # Update the status to error if retry limit is reached
-                self.mongo_handler.status_collection.update_one(
+                queue.update_one(
                     {'_id': item['_id']},
                     {'$set': {'status': 'error', 'error_message': 'Max retry limit reached'}}
                 )
@@ -463,27 +209,44 @@ class ProVeService:
             
             while self.running:
                 try:
+                    in_queue = self.mongo_handler.status_collection.find(
+                        {'status': 'in queue'},
+                        sort=[('requested_timestamp', 1)]
+                    )
+                    print("Items in queue:")
+                    for item in in_queue:
+                        print(item)
+                    exit()
                     self.mongo_handler.ensure_connection()
-                    status_dict = self.mongo_handler.get_next_user_request()
+                    status_dict = self.mongo_handler.get_next_request(self.priority_queue)
                     
                     if status_dict:
                         logger.info(f"Processing request for QID: {status_dict['qid']}")
                         self.main_loop(status_dict)
-                    else:
-                        self.check_and_run_random_qid()
-                        time.sleep(1)
+                    elif self.secondary_queues:
+                        for queue in self.secondary_queues:
+                            status_dict = self.mongo_handler.get_next_request(queue)
+                            if status_dict:
+                                logger.info(f"Processing request from secondary queue for QID: {status_dict['qid']}")
+                                self.main_loop(status_dict)
+                                break
 
-                    self.retry_processing()
+                    self.retry_processing(self.priority_queue)
+                    for queue in self.secondary_queues:
+                        self.retry_processing(queue)
                     schedule.run_pending()
                     time.sleep(1)
 
                 except Exception as e:
+                    print(f"Main loop error: {str(e)}")
                     logger.error(f"Main loop error: {str(e)}")
                     time.sleep(30)
                 
         except Exception as e:
+            print(f"Fatal error in service: {str(e)}")
             logger.fatal(f"Fatal error in service: {str(e)}")
             sys.exit(1)
+        print("Service stopped gracefully.")
 
     def run_top_viewed_items(self):
         logger.info("Running process_top_viewed_items...")
@@ -494,15 +257,17 @@ class ProVeService:
         process_pagepile_list()
 
     def check_and_run_random_qid(self):
+        print(self.mongo_handler.status_collection.find_one({'status': 'in queue'}))
         if not self.mongo_handler.status_collection.find_one({'status': 'in queue'}):
             logger.info("No QIDs in queue, running process_random_qid...")
             for _ in range(5): 
                 process_random_qid()
+        exit()
 
 if __name__ == "__main__":
-
     #MongoDBHandler().reset_database() #reset database
-    service = ProVeService('config.yaml')
+    service = ProVeService('config.yaml', 'status_collection', ['random_collection', 'user_collection'])
+    print("Starting ProVe service...")
     service.run()
 
     # Process entity

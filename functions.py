@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import partial
 from collections import defaultdict
 from copy import deepcopy
 import json
@@ -11,10 +12,12 @@ import pandas as pd
 from plotly.subplots import make_subplots
 from plotly import graph_objects as go
 from plotly import io as pio
+from pymongo import collection
 import yaml
 
-from ProVe_main_service import MongoDBHandler
 from utils.logger import logger
+from utils.mongo_handler import MongoDBHandler
+from utils.mongo_handler import requestItemProcessing as request_processing
 from utils.objects import Status, HtmlContent, Entailment
 
 mongo_handler = MongoDBHandler()
@@ -548,20 +551,32 @@ def comprehensive_results(target_id):
 #2. status
 #2.1. checkQueue
 def checkQueue():
-    data_df = get_filtered_data(db_path, 'status', 'status', 'in queue')
-    data_df = [{k: v for k, v in item.items() if k not in 'algo_version'} for item in data_df]
-    return data_df
+    in_queue = mongo_handler.status_collection.find(
+        {'status': 'in queue'},
+        sort=[('requested_timestamp', 1)]
+    )
+
+    items = []
+    for item in in_queue:
+        items.append({
+            'item': item['qid'],
+            'timestamp': item['requested_timestamp'].strftime('%Y-%m-%dT%H:%M:%S.%f'),
+        })
+    return items
+
 #2.2. checkCompleted
 def checkCompleted():
     data_df = get_filtered_data(db_path, 'status', 'status', 'completed')
     data_df = [{k: v for k, v in item.items() if k not in 'algo_version'} for item in data_df]
     return data_df
+
+
 #2.3. checkErrors
 def checkErrors():
     data_df = get_filtered_data(db_path, 'status', 'status', 'error')
     data_df = [{k: v for k, v in item.items() if k not in 'algo_version'} for item in data_df]
     return data_df
-#2.4. checkParams
+
 
 #3. statistics
 data_df = get_filtered_data(db_path, 'status', 'status', 'in queue')
@@ -589,38 +604,21 @@ def check_queue_status(conn, qid):
     count = cursor.fetchone()[0]
     return count > 0
 
-def requestItemProcessing(qid):
+
+def requestItemProcessing(qid: str):
     """Request processing for a specific QID"""
-    try:
-        # Check if item is already in queue
-        existing_request = mongo_handler.status_collection.find_one({
-            'qid': qid,
-            'status': 'in queue'
-        })
-        
-        if existing_request:
-            return f"QID {qid} is already in queue. Skipping..."
-        
-        # Create new status document
-        status_dict = {
-            'qid': qid,
-            'task_id': str(uuid.uuid4()),
-            'status': 'in queue',
-            'algo_version': algo_version,
-            'request_type': 'userRequested',
-            'requested_timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-            'processing_start_timestamp': None,
-            'completed_timestamp': None
-        }
-        
-        # Save to MongoDB
-        result = mongo_handler.save_status(status_dict)
-        
-        return f"Task {status_dict['task_id']} created for QID {qid}"
-        
-    except Exception as e:
-        logger.error("Error in requestItemProcessing: %s", e)
-        return f"An error occurred: {e}"
+    save_function = partial(
+        mongo_handler.save_status,
+        queue=mongo_handler.user_collection,
+    )
+    return request_processing(
+        qid=qid,
+        algo_version=algo_version,
+        request_type="userRequested",
+        queue=mongo_handler.user_collection,
+        save_function=save_function
+    )
+
 
 #5. Generation worklist
 def finding_latest_entries(full_df):
@@ -834,6 +832,7 @@ def get_config_as_json():
     except FileNotFoundError as e:
         logger.error("Config file not found: %s", e)
         return None
+
 
 def process_reference(url: str, claim: str):
     import nltk
