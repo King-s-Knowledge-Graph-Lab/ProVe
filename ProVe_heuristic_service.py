@@ -95,8 +95,12 @@ class HeuristicBasedService(ProVeService):
 
         Returns:
             bool: True if the QID is valid and does not already exist in any of the secondary
-            queues, False otherwise.
+            queues, and priority queue. False otherwise.
         """
+        if self.priority_queue.find_one({'qid': qid}):
+            logger.warning(f"{qid} already exists in priority queue {self.priority_queue.name}.")
+            return False
+
         for queue in self.secondary_queue:
             if queue.find_one({'qid': qid}):
                 logger.warning(f"QID {qid} already exists in secondary queue {queue.name}.")

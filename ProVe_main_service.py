@@ -1,15 +1,13 @@
 from datetime import datetime
 import time
 from threading import Lock
-from typing import List
-import random
+from typing import List, Dict, Any
 import signal
 import sys
 
 import nltk
 from pymongo import collection
 import schedule
-from SPARQLWrapper import SPARQLWrapper, JSON
 from torch.nn import Module
 import yaml
 
@@ -21,51 +19,36 @@ import ProVe_main_process
 from utils.logger import logger
 from utils.mongo_handler import MongoDBHandler
 
+
 try:
     nltk.download('punkt_tab')
 except Exception as e:
     logger.error(f"Error downloading nltk data: {e}")
 
 
-class RandomItemCollector:
-    def __init__(self):
-        self.sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
-
-    def get_random_qids(self, num_qids, max_retries=10, delay=1):
-        query = """
-            SELECT ?item {
-                SERVICE bd:sample {
-                    ?item wikibase:sitelinks [].
-                    bd:serviceParam bd:sample.limit "100".
-                }
-                MINUS {?item wdt:P31/wdt:P279* wd:Q4167836.}
-                MINUS {?item wdt:P31/wdt:P279* wd:Q4167410.}
-                MINUS {?item wdt:P31 wd:Q13406463.}
-                MINUS {?item wdt:P31/wdt:P279* wd:Q11266439.}
-                MINUS {?item wdt:P31 wd:Q17633526.}
-                MINUS {?item wdt:P31 wd:Q13442814.}
-                MINUS {?item wdt:P3083 [].}
-                MINUS {?item wdt:P1566 [].}
-                MINUS {?item wdt:P442 [].}
-            }
-        """
-        self.sparql.setQuery(query)
-        self.sparql.setReturnFormat(JSON)
-
-        for attempt in range(max_retries):
-            try:
-                results = self.sparql.query().convert()
-                all_qids = [result["item"]["value"].split("/")[-1] 
-                           for result in results["results"]["bindings"]]
-                return random.sample(all_qids, min(num_qids, len(all_qids)))
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    logger.error(f"Error: {e}. {delay} seconds later retry...")
-                    time.sleep(delay)
-        return []
-
-
 class ProVeService:
+    """    ProVeService is a service class that manages the ProVe processing pipeline.
+    It initializes resources, sets up signal handlers for graceful shutdown, and runs the main
+    processing loop. The service can process tasks from a priority queue and secondary queues
+    in MongoDB. 
+
+    Args:
+        config_path (str): Path to the configuration file.
+        priority_queue (str): Name of the priority queue in MongoDB.
+        secondary_queue (List[str]): List of names of secondary queues in MongoDB
+
+    Attributes:
+        config (Dict[str, Any]): Configuration settings loaded from the YAML file.
+        running (bool): A flag indicating whether the service is running.
+        task_lock (Lock): A threading lock to ensure thread-safe operations.
+        mongo_handler (MongoDBHandler): An instance of MongoDBHandler for database operations.
+        models (List[Module]): A list of initialized models for processing tasks.
+        priority_queue (collection): The priority queue collection in MongoDB.
+        secondary_queue (List[collection]): A list of secondary queue collections in MongoDB.
+
+    Raises:
+        Exception: If there is an error loading the configuration file or initializing resources.
+    """
     def __init__(
         self,
         config_path: str,
@@ -84,8 +67,18 @@ class ProVeService:
         schedule.every().day.at("02:00").do(self.run_top_viewed_items)
         schedule.every().saturday.at("03:00").do(self.run_pagepile_list)
 
-    def _load_config(self, config_path):
-        """Load configuration from yaml file"""
+    def _load_config(self, config_path: str) -> Dict[str, Any]:
+        """ Load configuration from a YAML file.
+
+        Args:
+            config_path (str): Path to the configuration file.
+
+        Returns:
+            Dict[str, Any]:  A dictionary containing the configuration settings.
+
+        Raises:
+            Exception: If there is an error loading the configuration file.
+        """
         try:
             with open(config_path, 'r') as file:
                 config = yaml.safe_load(file)
@@ -94,16 +87,33 @@ class ProVeService:
             logger.error(f"Error loading config file: {e}")
             return {}
 
-    def setup_signal_handlers(self):
+    def setup_signal_handlers(self) -> None:
+        """Setup signal handlers for graceful shutdown."""
         signal.signal(signal.SIGINT, self.handle_shutdown)
         signal.signal(signal.SIGTERM, self.handle_shutdown)
 
-    def handle_shutdown(self, signum, frame):
+    def handle_shutdown(self, *args):
+        """Handle shutdown signals gracefully."""
         logger.fatal("Shutdown signal received. Cleaning up...")
         self.running = False
 
-    def initialize_resources(self, model: bool = True):
-        """Initialize models and database with retry mechanism"""
+    def initialize_resources(self, model: bool = True) -> bool:
+        """
+        Initialize resources for the ProVe service. This method initializes the MongoDB connection,
+        sets up the priority and secondary queues, and optionally initializes the models if
+        specified. It retries initialization up to three times with a delay between attempts in case
+        of failure.
+
+        Args:
+            model (bool, optional): Loads models. Defaults to True.
+
+        Raises:
+            ValueError:  If any of the queues are not found in MongoDBHandler.
+            ValueError:  If the models cannot be initialized.
+
+        Returns:
+            bool: True if initialization is successful, False otherwise.
+        """
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -112,12 +122,22 @@ class ProVeService:
                 logger.info("WikiDataMongoDB connection successful")
 
                 logger.info("Initializing queues...")
-                self.priority_queue = getattr(self.mongo_handler, self.priority_queue, None)
-                if self.priority_queue is None:
-                    raise ValueError(f"Priority queue '{self.priority_queue}' not found in MongoDBHandler")
-                secondary_queue = [getattr(self.mongo_handler, queue) for queue in self.secondary_queue]
+                # Initialize priority queue
+                priority_queue = getattr(self.mongo_handler, self.priority_queue, None)
+                if priority_queue is None:
+                    exception = f"Priority queue '{self.priority_queue}'"
+                    exception += " not found in MongoDBHandler"
+                    raise ValueError(exception)
+                self.priority_queue = priority_queue
+
+                # Initialize secondary queues
+                secondary_queue = [
+                    getattr(self.mongo_handler, queue) for queue in self.secondary_queue
+                ]
                 if len(secondary_queue) != len(self.secondary_queue):
-                    raise ValueError(f"One or more secondary queues not found in MongoDBHandler: {self.secondary_queue}")
+                    exception = "One or more secondary queues not found in MongoDBHandler: "
+                    exception += f"{self.secondary_queue}"
+                    raise ValueError(exception)
                 self.secondary_queue = secondary_queue
                 logger.info("Queues initialized successfully")
 
@@ -135,8 +155,14 @@ class ProVeService:
                     return False
                 time.sleep(5)
 
-    def main_loop(self, status_dict):
-        """Process single request with lock mechanism"""
+    def main_loop(self, status_dict: Dict[str, Any]) -> None:
+        """
+        Main processing loop for handling tasks.
+
+        Args:
+            status_dict (Dict[str, Any]): A dictionary containing the status of the task,
+                including 'qid' and 'task_id'.
+        """
         with self.task_lock:
             try:
                 self.mongo_handler.ensure_connection()
@@ -158,7 +184,9 @@ class ProVeService:
                 self.mongo_handler.save_parser_stats(parser_stats)
 
                 status_dict['status'] = 'completed'
-                status_dict['completed_timestamp'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')
+                status_dict['completed_timestamp'] = datetime.utcnow().strftime(
+                    '%Y-%m-%dT%H:%M:%S.%f'
+                )
                 self.mongo_handler.save_status(status_dict)
                 from functions import get_summary
                 get_summary(qid, update=True)
@@ -170,7 +198,12 @@ class ProVeService:
                 self.mongo_handler.save_status(status_dict)
 
     def retry_processing(self, queue: collection) -> None:
-        """Retry processing for items stuck in processing state."""
+        """
+        Retry processing items in the queue that are stuck in 'processing' state.
+
+        Args:
+            queue (collection): The MongoDB collection representing the queue to check.
+        """
         retry_limit = 3
 
         # Find items that are in processing state
@@ -190,7 +223,7 @@ class ProVeService:
                 # Reprocess the item
                 self.main_loop(item)
             else:
-                logger.error(f"QID {item['qid']} has reached the maximum retry limit. Updating status to error.")
+                logger.error(f"QID {item['qid']} has reached the maximum retry limit.")
                 # Update the status to error if retry limit is reached
                 queue.update_one(
                     {'_id': item['_id']},
@@ -198,7 +231,14 @@ class ProVeService:
                 )
 
     def run(self):
-        """Main service loop with improved error handling"""
+        """
+        Start the ProVe service. This method initializes the service, sets up the MongoDB
+        connection, and starts the main processing loop. It runs indefinitely until a shutdown
+        signal is received.
+
+        Raises:
+            SystemExit: If the service fails to initialize resources or encounters a fatal error.
+        """
         try:
             if not self.initialize_resources():
                 logger.fatal("Failed to initialize resources. Exiting...")
@@ -218,7 +258,9 @@ class ProVeService:
                         for queue in self.secondary_queue:
                             status_dict = self.mongo_handler.get_next_request(queue)
                             if status_dict:
-                                logger.info(f"Processing request from secondary queue for QID: {status_dict['qid']}")
+                                message = "Processing request from secondary queue for QID: "
+                                message += f"{status_dict['qid']}"
+                                logger.info(message)
                                 self.main_loop(status_dict)
                                 break
 
