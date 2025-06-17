@@ -145,23 +145,34 @@ def process_pagepile_list(file_path='utils/pagepileList.txt'):
     except Exception as e:
         logger.error(f"Error processing pagepile list: {e}")
 
-def process_random_qid():
+
+def process_system_qid(qid: str) -> None:
     """
-    Generate a random QID and queue it for processing.
+    Queue system QID for processing.
+
+    Args:
+        qid: The QID to process.
+
+    Raises:
+        ValueError: If the QID does not start with 'Q'.
     """
-    random_number = random.randint(0, 129999999)  # Generate a random number less than 130,000,000
-    random_qid = f"Q{random_number}"  # Create QID by prefixing 'Q'
-    print(f"Generated random QID: {random_qid}")
+    if not qid.startswith('Q'):
+        try:
+            int(qid)  # Check if the random QID is a valid integer
+            qid = f"Q{qid}"
+        except ValueError as e:
+            raise ValueError("Generated QID does not start with 'Q'.") from e
     
     # Queue the random QID for processing
     result = requestItemProcessing(
-        qid=random_qid,
+        qid=qid,
         algo_version=algo_version,
         request_type='Random_processing',
         queue=mongo_handler.random_collection,
         save_function=mongo_handler.random_collection.insert_one
     )
-    logger.info(f"Queued random QID {random_qid} for processing: {result}")
+    logger.info(f"Queued random QID {qid} for processing: {result}")
+
 
 if __name__ == "__main__":
     # Uncomment the desired function to run

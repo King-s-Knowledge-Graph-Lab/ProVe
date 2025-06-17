@@ -2,11 +2,14 @@ database:
   name: 'wikidata_claims_refs_parsed.db'
   result_db_for_API: '/home/ubuntu/mntdisk/reference_checked.db'
 
+queue:
+  heuristic: 'random'
+
 version:
   algo_version: '1.1.1'
 
 parsing:
-  reset_database: True #This is a developer mode to clean-up DB to test soemthing
+  reset_database: True  # This is a developer mode to clean-up DB to test soemthing
 
 spacy:
   model: 'en_core_web_sm'
@@ -14,7 +17,7 @@ spacy:
 html_fetching:
   batch_size: 10
   delay: 1.0
-  fetching_driver: 'chrome' #available options: 'chrome' or 'requests'
+  fetching_driver: 'chrome'  # available options: 'chrome' or 'requests'
   timeout: 15
 
 logging:
@@ -24,7 +27,7 @@ logging:
 text_processing:
   sentence_slide:
     enabled: true
-    window_size: 2  #sliding window for masking sentences
+    window_size: 2  # sliding window for masking sentences
     join_char: ' ' 
 
 evidence_selection:
