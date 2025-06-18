@@ -1,55 +1,143 @@
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, Union
 from datetime import datetime
 import time
 import uuid
 
 import pandas as pd
-from pymongo import MongoClient, collection
+from pymongo import MongoClient, collection, database
 
 from utils.logger import logger
 
-class MongoDBHandler:
-    def __init__(self, connection_string="mongodb://localhost:27017/", max_retries=3):
-        self.connection_string = connection_string
-        self.max_retries = max_retries
-        self.connect()
-    
-    def connect(self):
-        for attempt in range(self.max_retries):
-            try:
-                self.client = MongoClient(self.connection_string)
-                self.client.server_info()  # Test connection
-                self.db = self.client['wikidata_verification']
-                self.html_collection = self.db['html_content']
-                self.entailment_collection = self.db['entailment_results']
-                self.stats_collection = self.db['parser_stats']
-                self.status_collection = self.db['status']
-                self.summary_collection = self.db['summary']
 
-                # Singular queues
-                self.random_collection = self.db['random_queue']
-                self.user_collection = self.db['user_queue']
- 
-                logger.info("Successfully connected to WikiData verification MongoDB")
-                return
+class MongoDBHandler:
+    """
+    MongoDBHandler is a class that manages the connection to a MongoDB database and provides methods
+    to save HTML content, entailment results, parser statistics, and other data related to WikiData
+    verification tasks. It handles connection retries, ensures the connection is alive, and
+    provides methods to save various types of data with appropriate error handling and logging.
+
+    Args:
+        connection_string (str): The MongoDB connection string. Defaults to "mongodb://localhost:27017/".
+        max_retries (int): Maximum number of retries for connecting to MongoDB. Defaults to 3.
+
+    Attributes:
+        max_retries (int): Maximum number of retries for connecting to MongoDB.
+        connection_string (str): The MongoDB connection string.
+        client (MongoClient): The MongoDB client instance.
+        db (database): The database instance.
+        html_collection (collection): Collection for storing HTML content.
+        entailment_collection (collection): Collection for storing entailment results.
+        stats_collection (collection): Collection for storing parser statistics.
+        status_collection (collection): Collection for storing task status.
+        summary_collection (collection): Collection for storing task summaries.
+        random_collection (collection): Singular queue for random tasks.
+        user_collection (collection): Singular queue for user tasks.
+
+    Raises:
+        ConnectionError: If the connection to MongoDB fails after the maximum number of retries.
+    """
+    def __init__(
+        self,
+        connection_string: str = "mongodb://localhost:27017/",
+        max_retries: int = 3
+    ) -> None:
+        # MongoDB connection parameters
+        self.max_retries = max_retries
+        self.connection_string = connection_string
+
+        # Initialize MongoDB client and collections attributes
+        self.client: MongoClient = None
+        self.db: database = None
+        self.html_collection: collection = None
+        self.entailment_collection: collection = None
+        self.stats_collection: collection = None
+        self.status_collection: collection = None
+        self.summary_collection: collection = None
+        self.random_collection: collection = None
+        self.user_collection: collection = None
+        
+        # Attempt to connect to MongoDB
+        if not self.connect(max_retries, connection_string):
+            logger.error("Failed to connect to MongoDB")
+            raise ConnectionError("Could not connect to MongoDB after multiple attempts")
+    
+    def connect(self, max_retries: int, connection_string: str) -> bool:
+        """
+        Connect to MongoDB with retries.
+
+        Args:
+            max_retries (int): Maximum number of retries for connecting to MongoDB.
+            connection_string (str): The MongoDB connection string.
+
+        Returns:
+            bool: True if the connection is successful, False otherwise.
+        """
+        for attempt in range(max_retries):
+            try:
+                self.client = MongoClient(connection_string)
+                self.ensure_connection(try_reconnect=False)
+                break
             except Exception as e:
                 logger.error(f"MongoDB connection attempt {attempt + 1} failed: {e}")
-                if attempt == self.max_retries - 1:
-                    logger.error("Failed to connect to MongoDB")
-                    raise
-                time.sleep(5)  # Wait before retry
+                if attempt == max_retries - 1:
+                    return False
+                time.sleep(5)
+                continue
 
-    def ensure_connection(self):
-        """Ensure MongoDB connection is alive, reconnect if needed"""
+        # Access the database and collections
+        self.db = self.client['wikidata_verification']
+        self.html_collection = self.db['html_content']
+        self.entailment_collection = self.db['entailment_results']
+        self.stats_collection = self.db['parser_stats']
+        self.status_collection = self.db['status']
+        self.summary_collection = self.db['summary']
+
+        # Singular queues
+        self.random_collection = self.db['random_queue']
+        self.user_collection = self.db['user_queue']
+
+        logger.info("Successfully connected to WikiData verification MongoDB")
+        return True
+
+    def ensure_connection(self, try_reconnect: bool = True) -> None:
+        """
+        Ensure MongoDB connection is alive, reconnect if needed
+
+        Args:
+            try_reconnect (bool): Whether to attempt reconnection if the connection is lost.
+                Defaults to True.
+        
+        Raises:
+            ConnectionError: If the connection cannot be re-established.
+        """
         try:
             self.client.server_info()
         except Exception as e:
             logger.error("MongoDB connection lost, attempting to reconnect...")
             logger.error(f"Error details: {e}")
-            self.connect()
 
-    def save_html_content(self, html_df):
-        """Save HTML content data with task_id"""
+            if not try_reconnect:
+                logger.error("Reconnection failed, please check MongoDB server status")
+                raise ConnectionError("MongoDB connection lost") from e
+
+            if not self.connect(self.max_retries, self.connection_string):
+                logger.error("Reconnection failed, please check MongoDB server status")
+                raise ConnectionError("Could not reconnect to MongoDB") from e
+
+    def save_html_content(self, html_df: pd.DataFrame) -> None:
+        """
+        Save HTML content data with task_id.
+        
+        Args:
+            html_df (pd.DataFrame): DataFrame containing HTML content with columns:
+                - reference_id: Unique identifier for the HTML content.
+                - task_id: Identifier for the task associated with the HTML content.
+                - html: The actual HTML content as a string.
+                - fetch_timestamp: Timestamp when the HTML was fetched.
+            
+        Raises:
+            RuntimeError: If there is an error while saving HTML content to MongoDB.
+        """
         try:
             if html_df.empty:
                 logger.warning("html_df is empty")
@@ -87,18 +175,27 @@ class MongoDBHandler:
                         f"Updated HTML document with reference_id {record['reference_id']}: "
                         f"matched={result.matched_count}, modified={result.modified_count}, "
                         f"upserted_id={result.upserted_id}"
-                    )
-                          
+                    )        
                 except Exception as e:
                     logger.error(f"Error saving HTML record: {record}")
                     logger.error(f"Error details: {e}")
                     
         except Exception as e:
             logger.error(f"Error in save_html_content: {e}")
-            raise
+            raise RuntimeError(f"Failed to save HTML content: {e}") from e
 
-    def save_entailment_results(self, entailment_df):
-        """Save entailment results with task_id"""
+    def save_entailment_results(self, entailment_df: pd.DataFrame) -> None:
+        """
+        Save entailment results to MongoDB.
+        Args:
+            entailment_df (pd.DataFrame): DataFrame containing entailment results with columns:
+                - reference_id: Unique identifier for the entailment result.
+                - task_id: Identifier for the task associated with the entailment result.
+                - processed_timestamp: Timestamp when the entailment was processed.
+        
+        Raises:
+            RuntimeError: If there is an error while saving entailment results to MongoDB.
+        """
         try:
             if entailment_df.empty:
                 logger.warning("entailment_df is empty")
@@ -132,19 +229,33 @@ class MongoDBHandler:
                     
         except Exception as e:
             logger.error(f"Error in save_entailment_results: {e}")
-            raise
+            raise RuntimeError(f"Failed to save entailment results: {e}") from e
 
-    def save_parser_stats(self, stats_dict):
-        """Save parser statistics with task_id"""
+    def save_parser_stats(self, stats_dict: Dict[str, Any]) -> None:
+        """
+        Save parser statistics to MongoDB.
+
+        Args:
+            stats_dict (Dict[str, Any]): Dictionary containing parser statistics with keys:
+                - entity_id: Unique identifier for the entity.
+                - task_id: Identifier for the task associated with the entity.
+                - parsing_start_timestamp: Timestamp when parsing started.
+                - save_timestamp: Timestamp when the stats were saved.
+        
+        Raises:
+            RuntimeError: If there is an error while saving parser statistics to MongoDB.
+        """
         try:
             # Convert Pandas Timestamp to datetime
             if isinstance(stats_dict.get('parsing_start_timestamp'), pd.Timestamp):
-                stats_dict['parsing_start_timestamp'] = stats_dict['parsing_start_timestamp'].to_pydatetime()
+                stats_dict['parsing_start_timestamp'] = stats_dict[
+                    'parsing_start_timestamp'
+                ].to_pydatetime()
             
             # Add save timestamp
             stats_dict['save_timestamp'] = datetime.now()
             
-            result = self.stats_collection.update_one(
+            self.stats_collection.update_one(
                 {
                     'entity_id': stats_dict['entity_id'],
                     'task_id': stats_dict['task_id']
@@ -157,10 +268,25 @@ class MongoDBHandler:
             
         except Exception as e:
             logger.error(f"Error in save_parser_stats: {e}")
-            raise
+            raise RuntimeError(f"Failed to save parser statistics: {e}") from e
 
-    def save_status(self, status_dict, queue: collection = None):
-        """Save task status information to MongoDB"""
+    def save_status(self, status_dict: Dict[str, Any], queue: collection = None) -> None:
+        """
+        Save or update the status of a task in the specified queue.
+
+        Args:
+            status_dict (Dict[str, Any]): Dictionary containing status information with keys:
+                - task_id: Unique identifier for the task.
+                - qid: Unique identifier for the item being processed.
+                - status: Current status of the task (e.g., 'in queue', 'processing', 'completed').
+                - algo_version: Version of the algorithm used.
+                - request_type: Type of request (e.g., 'userRequested').
+                - requested_timestamp: Timestamp when the request was made.
+                - processing_start_timestamp: Timestamp when processing started.
+                - completed_timestamp: Timestamp when processing completed.
+            queue (collection, optional): which MongoDB collection to save the status in.
+                Defaults to status.
+        """
         if queue is None:
             queue = self.status_collection
 
@@ -213,26 +339,21 @@ class MongoDBHandler:
 
         except Exception as e:
             logger.error(f"Error in save_status: {e}")
-            raise
+            raise RuntimeError(f"Failed to save status: {e}") from e
 
-    def reset_database(self):
-        """Reset all collections in the database"""
-        try:
-            self.html_collection.drop()
-            self.entailment_collection.drop()
-            self.stats_collection.drop()
-            self.status_collection.drop()
-            
-            logger.info("All collections have been reset successfully")
-            
-        except Exception as e:
-            logger.error(f"Error resetting database: {e}")
-            raise
-
-    def get_next_request(self, queue: collection):
+    def get_next_request(self, queue: collection) -> Union[Dict[str, Any], None]:
         """
-        Get the next pending request from a collection
-        Returns a dictionary with request information or None if no requests found
+        Get the next user request from the queue.
+
+        Args:
+            queue (collection): The MongoDB collection to search for requests.
+
+        Returns:
+            Union[Dict[str, Any], None]: Entry of the next request to be processed,
+                or None if no requests are found.
+        
+        Raises:
+            RuntimeError: If there is an error while retrieving the next request.
         """
         try:
             # Find the oldest request that hasn't been processed
@@ -262,7 +383,7 @@ class MongoDBHandler:
             
         except Exception as e:
             logger.error(f"Error getting next user request: {e}")
-            return None
+            raise RuntimeError(f"Failed to get next request: {e}") from e
 
 
 def requestItemProcessing(
@@ -271,8 +392,23 @@ def requestItemProcessing(
     request_type: str = 'userRequested',
     algo_version: str = '1.1.1',
     save_function: Callable[[Dict[str, Any]], None] = None
-):
-    """Request processing for a specific QID"""
+) -> str:
+    """
+    Request item processing by creating a new status document in the specified queue.
+
+    Args:
+        qid (str): Unique Wikidata identifier for the item being processed.
+        queue (collection): The MongoDB collection where the status will be saved.
+        request_type (str, optional): Whether the request is user requested or random.
+            Defaults to 'userRequested'.
+        algo_version (str, optional): Version of the algorithm used for processing.
+            Defaults to '1.1.1'.
+        save_function (Callable[[Dict[str, Any]], None], optional): Function to save the status 
+            document. This should be changed in next releases.
+
+    Returns:
+        result (str): A message indicating the result of the request processing.
+    """
     try:
         # Check if item is already in queue
         existing_request = queue.find_one({
