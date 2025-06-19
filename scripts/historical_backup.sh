@@ -1,3 +1,6 @@
+#! /bin/bash
+set -e
+
 DATE=$(date +"%Y%m%d")
 mkdir -p /mnt/rds/backups/
 

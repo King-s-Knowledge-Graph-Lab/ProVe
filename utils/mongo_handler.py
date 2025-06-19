@@ -4,7 +4,7 @@ import time
 import uuid
 
 import pandas as pd
-from pymongo import MongoClient, collection, database
+from pymongo import MongoClient, collection, database, ReturnDocument
 
 from utils.logger import logger
 
@@ -55,7 +55,7 @@ class MongoDBHandler:
         self.summary_collection: collection = None
         self.random_collection: collection = None
         self.user_collection: collection = None
-        
+
         # Attempt to connect to MongoDB
         if not self.connect(max_retries, connection_string):
             logger.error("Failed to connect to MongoDB")
@@ -95,6 +95,12 @@ class MongoDBHandler:
         # Singular queues
         self.random_collection = self.db['random_queue']
         self.user_collection = self.db['user_queue']
+
+        # Set indexes for high concurrency
+        try:
+            self.random_collection.create_index([('status', 1), ('requested_timestamp', 1)])
+        except Exception as e:
+            logger.error(f"Failed to create index {e}")
 
         logger.info("Successfully connected to WikiData verification MongoDB")
         return True
@@ -351,36 +357,28 @@ class MongoDBHandler:
         Returns:
             Union[Dict[str, Any], None]: Entry of the next request to be processed,
                 or None if no requests are found.
-        
+
         Raises:
             RuntimeError: If there is an error while retrieving the next request.
         """
         try:
             # Find the oldest request that hasn't been processed
-            pending_request = queue.find_one(
-                {'status': 'in queue'},
-                sort=[('requested_timestamp', 1)]  # Get oldest request first
-            )
-            
-            if pending_request:
-                # Update status to processing and add processing start timestamp
-                status_dict = {
-                    'qid': pending_request['qid'],
-                    'task_id': pending_request['task_id'],
+            pending_request = queue.find_one_and_update(
+                {
+                    'status': 'in queue',
+                    'processing_start_timestamp': {'$exists': False}
+                },
+                {'$set': {
                     'status': 'processing',
-                    'algo_version': pending_request.get('algo_version', '1.0'),
-                    'request_type': pending_request['request_type'],
-                    'requested_timestamp': pending_request['requested_timestamp'],
                     'processing_start_timestamp': datetime.utcnow(),
-                    'completed_timestamp': 'null'
-                }
-                
-                # Update the document in MongoDB
-                self.save_status(status_dict, queue)
-                
-                return status_dict
-            return None  # No requests found
-            
+                }},
+                sort=[('requested_timestamp', 1)],
+                return_document=ReturnDocument.AFTER
+            )
+
+            if pending_request:
+                return pending_request
+            return None
         except Exception as e:
             logger.error(f"Error getting next user request: {e}")
             raise RuntimeError(f"Failed to get next request: {e}") from e
