@@ -167,6 +167,7 @@ class ProVeService:
             try:
                 self.mongo_handler.ensure_connection()
                 self.mongo_handler.save_status(status_dict)
+                logger.info("Saved new status_dict into status")
 
                 qid = status_dict['qid']
                 task_id = status_dict['task_id']
@@ -188,8 +189,13 @@ class ProVeService:
                     '%Y-%m-%dT%H:%M:%S.%f'
                 )
                 self.mongo_handler.save_status(status_dict)
-                from functions import get_summary
-                get_summary(qid, update=True)
+                logger.info("Updated new status_dict into status")
+                try:
+                    from functions import get_summary
+                    get_summary(qid, update=True)
+                except Exception as e:
+                    logger.error(f"Could not update summary for {qid}.")
+                    logger.error("Process will continue to keep application consistent")
 
             except Exception as e:
                 logger.error(f"Error processing task {task_id}: {e}")
@@ -253,7 +259,9 @@ class ProVeService:
 
                     if status_dict:
                         logger.info(f"Processing request for QID: {status_dict['qid']}")
+                        queue = self.priority_queue
                         self.main_loop(status_dict)
+                        self.update_request(queue, status_dict, "completed")
                     elif self.secondary_queue:
                         for queue in self.secondary_queue:
                             status_dict = self.mongo_handler.get_next_request(queue)
@@ -262,6 +270,7 @@ class ProVeService:
                                 message += f"{status_dict['qid']}"
                                 logger.info(message)
                                 self.main_loop(status_dict)
+                                self.update_request(queue, status_dict, "completed")
                                 break
 
                     self.retry_processing(self.priority_queue)
@@ -277,6 +286,14 @@ class ProVeService:
         except Exception as e:
             logger.fatal(f"Fatal error in service: {str(e)}")
             sys.exit(1)
+
+    def update_request(self, queue, status_dict, status):
+        logger.info(f"Updating {status_dict['qid']} for {queue.name}")
+        queue.update_one(
+            {'task_id': status_dict['task_id'], 'qid': status_dict['qid']},
+            {'$set': {'status': status}}
+        )
+        logger.info(f"Updated {status_dict['qid']} original request with {status}")
 
     def run_top_viewed_items(self):
         logger.info("Running process_top_viewed_items...")

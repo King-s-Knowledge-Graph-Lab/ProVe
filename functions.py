@@ -551,7 +551,7 @@ def comprehensive_results(target_id):
 #2. status
 #2.1. checkQueue
 def checkQueue():
-    in_queue = mongo_handler.status_collection.find(
+    in_queue = mongo_handler.user_collection.find(
         {'status': 'in queue'},
         sort=[('requested_timestamp', 1)]
     )
