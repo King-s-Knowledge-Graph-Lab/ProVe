@@ -55,7 +55,7 @@ class MongoDBHandler:
         self.summary_collection: collection = None
         self.random_collection: collection = None
         self.user_collection: collection = None
-        
+
         # Attempt to connect to MongoDB
         if not self.connect(max_retries, connection_string):
             logger.error("Failed to connect to MongoDB")
@@ -95,6 +95,12 @@ class MongoDBHandler:
         # Singular queues
         self.random_collection = self.db['random_queue']
         self.user_collection = self.db['user_queue']
+
+        # Set indexes for high concurrency
+        try:
+            self.random_collection.create_index([('status', 1), ('requested_timestamp', 1)])
+        except Exception as e:
+            logger.error(f"Failed to create index {e}")
 
         logger.info("Successfully connected to WikiData verification MongoDB")
         return True
@@ -351,14 +357,17 @@ class MongoDBHandler:
         Returns:
             Union[Dict[str, Any], None]: Entry of the next request to be processed,
                 or None if no requests are found.
-        
+
         Raises:
             RuntimeError: If there is an error while retrieving the next request.
         """
         try:
             # Find the oldest request that hasn't been processed
             pending_request = queue.find_one_and_update(
-                {'status': 'in queue'},
+                {
+                    'status': 'in queue',
+                    'processing_start_timestamp': {'$exists': False}
+                },
                 {'$set': {
                     'status': 'processing',
                     'processing_start_timestamp': datetime.utcnow(),
