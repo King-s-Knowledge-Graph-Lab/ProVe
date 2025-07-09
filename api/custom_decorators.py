@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+from base64 import b64encode, b64decode
 from functools import wraps
 from flask import request
+import os
 import threading
 import time
 from typing import Any, Union
@@ -9,17 +11,18 @@ import sys
 from pymongo import MongoClient
 
 from utils_api import get_ip_location, logger
-from local_secrets import CODE_PATH, SOURCE
+from local_secrets import CODE_PATH, SOURCE, API_KEY, PRIVATE_KEY
 
 sys.path.append(CODE_PATH)
-from ProVe_main_service import MongoDBHandler
+from utils.mongo_handler import MongoDBHandler
+from utils.auth import AsyncAuth
 
 
 class StatsDBHandler(MongoDBHandler):
     def __init__(self, connection_string="mongodb://localhost:27017/", max_retries=3):
         super().__init__(connection_string, max_retries)
 
-    def connect(self):
+    def connect(self, max_retries: int, connection_string: str):
         for attempt in range(self.max_retries):
             try:
                 self.client = MongoClient(self.connection_string)
@@ -27,7 +30,7 @@ class StatsDBHandler(MongoDBHandler):
                 self.db = self.client['service_usage']
                 self.usage_collection = self.db['usage']
                 print("Successfully connected to StatsDB")
-                return
+                return True
             except Exception as e:
                 print(f"StatsDB connection attempt {attempt + 1} failed: {e}")
                 if attempt == self.max_retries - 1:
@@ -118,3 +121,19 @@ def log_usage_information(
     except ConnectionError as e:
         print(f"Failed to log usage information from StatsDB: {e}")
         return
+
+
+def api_required(func):
+    @wraps(func)
+    def decorator(*args, **kwargs):
+        if not request.json:
+            return {"message": "Please provide an API key."}, 400
+
+        api_key = request.json.get("api_key", None)
+        api_key = b64decode(api_key)
+        if api_key is None or not AsyncAuth.is_valid(api_key):
+            return {"message": "Please provide a valid API key."}, 403
+        else:
+            return func(*args, **kwargs)
+    return decorator
+
