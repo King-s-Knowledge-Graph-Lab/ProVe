@@ -1,9 +1,11 @@
 from datetime import datetime
 import time
 from threading import Lock
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
+import requests
 import signal
 import sys
+import uuid
 
 import nltk
 from pymongo import collection
@@ -18,6 +20,8 @@ from background_processing import (
 import ProVe_main_process
 from utils.logger import logger
 from utils.mongo_handler import MongoDBHandler
+from utils.local_secrets import ENDPOINT, API_KEY
+from utils.auth import AsyncAuth
 
 
 try:
@@ -62,6 +66,7 @@ class ProVeService:
         self.models: List[Module] = None
         self.priority_queue = priority_queue
         self.secondary_queue = secondary_queue or []
+        self.uuid = uuid.uuid4()
 
         # Schedule settings
         schedule.every().day.at("02:00").do(self.run_top_viewed_items)
@@ -96,6 +101,32 @@ class ProVeService:
         """Handle shutdown signals gracefully."""
         logger.fatal("Shutdown signal received. Cleaning up...")
         self.running = False
+
+    def get_public_key(self, count: int = 0) -> bool:
+        response = requests.get(f"{ENDPOINT}getKey")
+        if response.json().get("public key", None):
+            public_key = response.json().get("public key").encode("utf-8")
+            self.public_key = AsyncAuth.load_key(public_key, private=False)
+            return True
+        else:
+            if count < 5:
+                self.get_public_key(count + 1)
+        return False
+
+    def get_next_request(self, queue: str) -> Union[str, None]:
+        api_key = AsyncAuth.encrypt(self.public_key, API_KEY)
+        api_key = AsyncAuth.serialize(api_key)
+        body = {
+            "api_key": api_key,
+            "uuid": str(self.uuid),
+            "queue": "random" if "random" in queue else "user"
+        }
+        
+        response = requests.post(
+            f"{ENDPOINT}getNextQueue",
+            json=body
+        )
+        return response.json().get("_id", None)
 
     def initialize_resources(self, model: bool = True) -> bool:
         """
@@ -246,8 +277,12 @@ class ProVeService:
             SystemExit: If the service fails to initialize resources or encounters a fatal error.
         """
         try:
-            if not self.initialize_resources():
+            if not self.initialize_resources(model=False):
                 logger.fatal("Failed to initialize resources. Exiting...")
+                sys.exit(1)
+
+            if not self.get_public_key():
+                logger.fatal("Failed to fetch public key from queue manager.")
                 sys.exit(1)
 
             logger.info("Service started successfully")
@@ -255,7 +290,10 @@ class ProVeService:
             while self.running:
                 try:
                     self.mongo_handler.ensure_connection()
-                    status_dict = self.mongo_handler.get_next_request(self.priority_queue)
+                    _id = self.get_next_request(self.priority_queue.name)
+                    status_dict = {}
+                    if _id:
+                        status_dict = self.mongo_handler.get_request_by_id(self.priority_queue, _id)
 
                     if status_dict:
                         logger.info(f"Processing request for QID: {status_dict['qid']}")
@@ -264,7 +302,10 @@ class ProVeService:
                         self.update_request(queue, status_dict, "completed")
                     elif self.secondary_queue:
                         for queue in self.secondary_queue:
-                            status_dict = self.mongo_handler.get_next_request(queue)
+                            _id = self.get_next_request(queue.name)
+                            status_dict = {}
+                            if _id:
+                                status_dict = self.mongo_handler.get_request_by_id(queue, _id)
                             if status_dict:
                                 message = "Processing request from secondary queue for QID: "
                                 message += f"{status_dict['qid']}"
@@ -273,9 +314,6 @@ class ProVeService:
                                 self.update_request(queue, status_dict, "completed")
                                 break
 
-                    self.retry_processing(self.priority_queue)
-                    for queue in self.secondary_queue:
-                        self.retry_processing(queue)
                     schedule.run_pending()
                     time.sleep(1)
 

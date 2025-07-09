@@ -3,12 +3,12 @@ from pathlib import Path
 from flask import Flask, jsonify, request, render_template_string
 from flask_cors import CORS
 from flasgger import Swagger, swag_from
-import pandas as pd
 import sys
-import os, json
+import json
 
+from custom_decorators import log_request, api_required, AsyncAuth
 from local_secrets import CODE_PATH
-from custom_decorators import log_request
+from queue_manager import QueueManager
 
 sys.path.append(CODE_PATH)
 import functions
@@ -17,23 +17,30 @@ import functions
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
+
 template = {
-  "swagger": "2.0",
-  "info": {
-    "title": "ProVe API",
-    "description": "API for ProVe, developed by the King's Knowledge Graph Lab.",
-    "version": "1.1.1"
-  },
-  "host": "kclwqt.sites.er.kcl.ac.uk",
-  "schemes": ["https"],
-  "basePath": "/",
-  "consumes": ["application/json"],
-  "produces": ["application/json"],
-  "paths": {},
-  "headers": [("Access-Control-Allow-Origin", "*")]
+    "swagger": "2.0",
+    "info": {
+        "title": "ProVe API",
+        "description": "API for ProVe, developed by the King's Knowledge Graph Lab.",
+        "version": "1.1.1"
+    },
+    "host": "kclwqt.sites.er.kcl.ac.uk",
+    "schemes": ["https"],
+    "basePath": "/",
+    "consumes": ["application/json"],
+    "produces": ["application/json"],
+    "paths": {},
+    "headers": [("Access-Control-Allow-Origin", "*")]
 }
 Swagger(app, template=template)
 PATH = Path(__file__).parent.absolute()
+
+
+queue_managers = {
+    "random": QueueManager('random_collection'),
+    "user": QueueManager('user_collection')
+}
 
 
 @app.route('/api/config', methods=['GET'])
@@ -360,8 +367,35 @@ def process_reference():
     try:
         result = functions.process_reference(url, sentence)
         return jsonify(result), 200
-    except Exception as e:
+    except Exception:
         return jsonify({"error": "Something went wrong"}), 400
+
+
+@app.route("/api/internal/getKey", methods=["GET"])
+def get_public_key():
+    try:
+        return jsonify({"public key": AsyncAuth.get_public_key(True)}), 200
+    except Exception:
+        return jsonify({"error": "Something went wrong"}), 400
+
+
+@app.route("/api/internal/getNextQueue", methods=["POST"])
+@api_required
+def get_next_in_queue():
+    data = request.get_json()
+    request_id = data.get("uuid", None)
+
+    if request_id is None:
+        return jsonify({"error": "each request must have a request id"}), 400
+
+    queue = data.get("queue", "random")
+    manager = queue_managers.get(queue)
+
+    try:
+        id = manager.get_next_in_queue(request_id)
+        return jsonify(id), 200
+    except Exception as e:
+        return jsonify({"error": "Something went wrong", "exception": str(e)}), 400
 
 
 if __name__ == '__main__':

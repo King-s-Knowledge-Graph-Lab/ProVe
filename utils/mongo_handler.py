@@ -362,11 +362,10 @@ class MongoDBHandler:
             RuntimeError: If there is an error while retrieving the next request.
         """
         try:
-            # Find the oldest request that hasn't been processed
             pending_request = queue.find_one_and_update(
                 {
                     'status': 'in queue',
-                    'processing_start_timestamp': {'$exists': False}
+                    'processing_start_timestamp': None
                 },
                 {'$set': {
                     'status': 'processing',
@@ -382,6 +381,49 @@ class MongoDBHandler:
         except Exception as e:
             logger.error(f"Error getting next user request: {e}")
             raise RuntimeError(f"Failed to get next request: {e}") from e
+
+    def get_request_by_id_and_reset(
+        self,
+        queue: collection,
+        _id: str
+    ) -> Union[Dict[str, Any], None]:
+        return queue.find_one_and_update(
+            {
+                '_id': _id,
+                'status': 'processing',
+                'processing_start_timestamp': {'$not': {'$eq': None}}
+            },
+            {'$set': {
+                'status': 'in queue',
+                'processing_start_timestamp': None
+            }},
+            return_document=ReturnDocument.AFTER
+        )
+
+    def set_request_status_and_processing_time(
+        self,
+        queue: collection,
+        status: str,
+        processing_time: datetime,
+        _id: str
+    ) -> Union[Dict[str, Any], None]:
+        return queue.find_one_and_update(
+            {'_id': _id},
+            {'$set': {
+                'status': status,
+                'processing_start_timestamp': processing_time
+            }},
+            return_document=ReturnDocument.AFTER
+        )
+
+    def get_request_by_id(self, queue: collection, _id: str) -> Union[Dict[str, Any], None]:
+        return queue.find_one({'_id': _id})
+
+    def get_request_by_taskid(self, queue: collection, task_id: str) -> Union[Dict[str, Any], None]:
+        return queue.find_one({'task_id': task_id})
+
+    def get_all_request_in_progress(self, queue: collection) -> Union[Dict[str, Any], None]:
+        return queue.find({'status': 'processing'})
 
 
 def requestItemProcessing(
@@ -401,7 +443,7 @@ def requestItemProcessing(
             Defaults to 'userRequested'.
         algo_version (str, optional): Version of the algorithm used for processing.
             Defaults to '1.1.1'.
-        save_function (Callable[[Dict[str, Any]], None], optional): Function to save the status 
+        save_function (Callable[[Dict[str, Any]], None], optional): Function to save the status
             document. This should be changed in next releases.
 
     Returns:
@@ -413,17 +455,17 @@ def requestItemProcessing(
             'qid': qid,
             'status': 'in queue'
         })
-        
+
         if existing_request:
             return f"QID {qid} is already in queue. Skipping..."
-        
+
         # Create new status document
         status_dict = {
             'qid': qid,
             'task_id': str(uuid.uuid4()),
             'status': 'in queue',
             'algo_version': algo_version,
-            'request_type':  request_type,
+            'request_type': request_type,
             'requested_timestamp': datetime.utcnow(),
             'processing_start_timestamp': None,
             'completed_timestamp': None
