@@ -1,5 +1,6 @@
 from typing import Dict, Any, Callable, Union
 from datetime import datetime
+from bson import ObjectId
 import time
 import uuid
 
@@ -417,7 +418,7 @@ class MongoDBHandler:
         )
 
     def get_request_by_id(self, queue: collection, _id: str) -> Union[Dict[str, Any], None]:
-        return queue.find_one({'_id': _id})
+        return queue.find_one({'_id': ObjectId(_id)})
 
     def get_request_by_taskid(self, queue: collection, task_id: str) -> Union[Dict[str, Any], None]:
         return queue.find_one({'task_id': task_id})

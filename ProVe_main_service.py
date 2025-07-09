@@ -126,7 +126,10 @@ class ProVeService:
             f"{ENDPOINT}getNextQueue",
             json=body
         )
-        return response.json().get("_id", None)
+        logger.info(f"{queue} {response.json()}, {bool(response.json())}")
+        if response.json():
+            return response.json().get("_id")
+        return None
 
     def initialize_resources(self, model: bool = True) -> bool:
         """
@@ -224,7 +227,7 @@ class ProVeService:
                 try:
                     from functions import get_summary
                     get_summary(qid, update=True)
-                except Exception as e:
+                except Exception:
                     logger.error(f"Could not update summary for {qid}.")
                     logger.error("Process will continue to keep application consistent")
 
@@ -277,7 +280,7 @@ class ProVeService:
             SystemExit: If the service fails to initialize resources or encounters a fatal error.
         """
         try:
-            if not self.initialize_resources(model=False):
+            if not self.initialize_resources():
                 logger.fatal("Failed to initialize resources. Exiting...")
                 sys.exit(1)
 
@@ -291,6 +294,8 @@ class ProVeService:
                 try:
                     self.mongo_handler.ensure_connection()
                     _id = self.get_next_request(self.priority_queue.name)
+                    logger.info(f"Next request {_id}")
+
                     status_dict = {}
                     if _id:
                         status_dict = self.mongo_handler.get_request_by_id(self.priority_queue, _id)
@@ -306,6 +311,8 @@ class ProVeService:
                             status_dict = {}
                             if _id:
                                 status_dict = self.mongo_handler.get_request_by_id(queue, _id)
+                            logger.info(f"{_id}: {status_dict}")
+
                             if status_dict:
                                 message = "Processing request from secondary queue for QID: "
                                 message += f"{status_dict['qid']}"
@@ -315,8 +322,6 @@ class ProVeService:
                                 break
 
                     schedule.run_pending()
-                    time.sleep(1)
-
                 except Exception as e:
                     logger.error(f"Main loop error: {str(e)}")
                     time.sleep(30)
