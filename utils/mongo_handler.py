@@ -39,7 +39,7 @@ class MongoDBHandler:
     def __init__(
         self,
         connection_string: str = "mongodb://localhost:27017/",
-        max_retries: int = 3
+        max_retries: int = 3,
     ) -> None:
         # MongoDB connection parameters
         self.max_retries = max_retries
@@ -60,7 +60,7 @@ class MongoDBHandler:
         if not self.connect(max_retries, connection_string):
             logger.error("Failed to connect to MongoDB")
             raise ConnectionError("Could not connect to MongoDB after multiple attempts")
-    
+
     def connect(self, max_retries: int, connection_string: str) -> bool:
         """
         Connect to MongoDB with retries.
