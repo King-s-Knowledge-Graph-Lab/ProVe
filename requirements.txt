@@ -9,8 +9,9 @@ nltk
 bs4
 selenium
 html2text
-pytorch_lightning
+pytorch_lightning==2.4.0
 rouge_score
 sacrebleu
-transformers
+transformers==4.46.3
 boto3
+cryptography==45.0.5
