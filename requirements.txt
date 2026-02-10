@@ -15,3 +15,5 @@ sacrebleu
 transformers==4.46.3
 boto3
 cryptography==45.0.5
+dash
+dash-bootstrap-components

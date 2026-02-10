@@ -10,8 +10,12 @@ import sys
 
 from pymongo import MongoClient
 
-from utils_api import get_ip_location, logger
-from local_secrets import CODE_PATH, SOURCE, API_KEY, PRIVATE_KEY
+try:
+    from utils_api import get_ip_location, logger
+    from local_secrets import CODE_PATH, SOURCE, API_KEY, PRIVATE_KEY
+except ImportError:
+    from api.utils_api import get_ip_location, logger
+    from api.local_secrets import CODE_PATH, SOURCE, API_KEY, PRIVATE_KEY
 
 sys.path.append(CODE_PATH)
 from utils.mongo_handler import MongoDBHandler
