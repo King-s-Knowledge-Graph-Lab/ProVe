@@ -1,0 +1,26 @@
+[project]
+name = "prove"
+version = "1.0.0"
+description = "Provenance Verification for Wikidata claims"
+readme = "README.md"
+requires-python = "==3.10.16"
+
+dependencies = [
+    "pandas",
+    "pyyaml",
+    "plotly",
+    "sparqlwrapper",
+    "schedule",
+    "pymongo",
+    "qwikidata",
+    "nltk",
+    "bs4",
+    "selenium",
+    "html2text",
+    "pytorch_lightning==2.4.0",
+    "rouge_score",
+    "sacrebleu",
+    "transformers==4.46.3",
+    "boto3",
+    "cryptography==45.0.5"
+]
