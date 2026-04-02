@@ -32,6 +32,73 @@ function loadentityselector(){
     }
 }
 
+// Shared helpers
+function createProveIcon(imageUrl) {
+    return $('<img>')
+        .attr('src', imageUrl)
+        .css({ 'vertical-align': 'middle', 'margin-left': '5px', 'width': '20px', 'height': 'auto' });
+}
+
+function attachHoverTooltip($el, content, useHtml) {
+    var hoverTimeout;
+    var tooltipCss = {
+        position: 'absolute',
+        top: 'calc(100% + 5px)',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: 'white',
+        border: '1px solid black',
+        padding: '5px',
+        zIndex: 1000,
+        whiteSpace: 'nowrap',
+        fontSize: '0.9em',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+    };
+    $el.hover(
+        function() {
+            clearTimeout(hoverTimeout);
+            var $hoverBox = $('<div>').css(tooltipCss);
+            if (useHtml) { $hoverBox.html(content); } else { $hoverBox.text(content); }
+            $(this).append($hoverBox);
+        },
+        function() {
+            var self = $(this);
+            hoverTimeout = setTimeout(function() { self.find('div').remove(); }, 250);
+        }
+    );
+}
+
+function attachRequestButtonHandler($button, buttonText, qid, totalStatements) {
+    $button.click(() => {
+        const apiUrl = `https://prove.wmcloud.org/api/requests/requestItem?qid=${qid}`;
+        $button.prop('disabled', true).text('Processing...');
+        fetch(apiUrl)
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(() => {
+                const estimatedComputationTimeMinutes = Math.ceil(totalStatements * 7.05 / 60);
+                let alertMessage;
+                if (buttonText === 'Compute') {
+                    alertMessage = `Your request for computation has been successfully queued. The estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
+                } else if (buttonText === 'Recompute') {
+                    alertMessage = `Your request for recomputation has been successfully queued. The estimated recomputation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
+                } else if (buttonText === 'Fetch Results') {
+                    alertMessage = `Your request for fetch has been successful. The updated estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
+                }
+                alert(alertMessage);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert(`Failed to ${buttonText.toLowerCase()} item. Please try again later.`);
+            })
+            .finally(() => {
+                $button.prop('disabled', false).text(buttonText);
+            });
+    });
+}
+
 // Prove Functions
 function calculateStatementStats() {
     const totalStatements = $('.wikibase-statementview').length;
@@ -51,7 +118,7 @@ function displayStatementStats(data) {
     // Calculate the statement statistics
     const stats = calculateStatementStats();
     let statementsHashmap = new Map();
-    for (entry of ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO", "error"]) {
+    for (let entry of ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO", "error"]) {
         if (entry in data) {
             new Map(Object.entries(data[entry]?.property_id || {})).forEach((value) => {
                 const current = statementsHashmap.get(value) ? statementsHashmap.get(value) : 0;
@@ -130,7 +197,6 @@ function displayStatementStats(data) {
                             'transition': originalTransition
                         });
                     }, 4000);
-                } else {
                 }
             } else {
                 alert('No statements missing references found.');
@@ -178,16 +244,7 @@ function updateProveHealthIndicator(data, qid, container) {
     $healthIndicator.append('ProVe Score: ' + healthValue + ' ');
 
     if (imageUrl) {
-        var $image = $('<img>')
-            .attr('src', imageUrl)
-            .css({
-                'vertical-align': 'middle',
-                'margin-left': '5px',
-                'width': '20px',  
-                'height': 'auto'  
-            });
-
-        $healthIndicator.append($image);
+        $healthIndicator.append(createProveIcon(imageUrl));
     }
 
 	const algoVersion = data.algo_version;
@@ -222,34 +279,7 @@ function updateProveHealthIndicator(data, qid, container) {
         </span>
 	`;
 	
-    let hoverTimeout; // to let the user hover the hover content without disappearing. 
-	$healthIndicator.hover(
-	    function() {
-            clearTimeout(hoverTimeout);
-	        var $hoverBox = $('<div>')
-	            .html(hoverContent)
-	            .css({
-	                position: 'absolute',
-	                top: 'calc(100% + 5px)',
-	                left: '50%',
-	                transform: 'translateX(-50%)',
-	                backgroundColor: 'white',
-	                border: '1px solid black',
-	                padding: '5px',
-	                zIndex: 1000,
-	                whiteSpace: 'nowrap',
-	                fontSize: '0.9em',
-	                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-	            });
-	        $(this).append($hoverBox);
-	    },
-	    function() {
-            const self = $(this);
-            hoverTimeout = setTimeout(function() {
-                self.find('div').remove();
-            }, 250);
-	    }
-	);
+    attachHoverTooltip($healthIndicator, hoverContent, true);
 	
 	var $proveLink = $('<a>')
 	    .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe#How_ProVe_Works')
@@ -276,41 +306,82 @@ function updateProveHealthIndicator(data, qid, container) {
 
     $button.text(buttonText).attr('title', hoverText);
 
-	$button.click(() => {
-	    const apiUrl = `https://kclwqt.sites.er.kcl.ac.uk/api/requests/requestItem?qid=${qid}`;
-	
-	    $button.prop('disabled', true).text('Processing...');
-	
-	    fetch(apiUrl)
-	        .then(response => {
-	            if (!response.ok) {
-	                throw new Error('Network response was not ok');
-	            }
-	            return response.json();
-	        })
-	        .then(responseData => {
-	            const estimatedComputationTimeMinutes = Math.ceil(totalStatements * 7.05 / 60);
-	
-	            let alertMessage;
-	            if (buttonText === 'Compute') {
-	                alertMessage = `Your request for computation has been successfully queued. The estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click fetch results button to check the updated time remaining.`;
-	            } else if (buttonText === 'Recompute') {
-	                alertMessage = `Your request for recomputation has been successfully queued. The estimated recomputation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click fetch results button to check the updated time remaining.`;
-	            } else if (buttonText === 'Fetch Results') {
-	                alertMessage = `Your request for fetch has been successful. The updated estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click fetch results button to check the updated time remaining.`;
-	            }
-	
-	            alert(alertMessage);
-	        })
-	        .catch(error => {
-	            console.error('Error:', error);
-	            alert(`Failed to ${buttonText.toLowerCase()} item. Please try again later.`);
-	        })
-	        .finally(() => {
-	            $button.prop('disabled', false).text(buttonText);
-	        });
-	});
+    attachRequestButtonHandler($button, buttonText, qid, totalStatements);
 	$proveContainer.append($button);
+    return $proveContainer;
+}
+
+function buildHealthIndicatorFromSummary(summary, qid, container) {
+    const totalStatements = calculateStatementStats().total;
+    var $proveContainer = $('<div class="prove-health-container"></div>');
+
+    var healthValue = (typeof summary.proveScore === 'number') ? summary.proveScore.toFixed(2) : 'N/A';
+
+    var imageUrl = '';
+    if (healthValue !== 'N/A') {
+        var numericValue = parseFloat(healthValue);
+        var imageNumber = 0;
+        if (numericValue >= 0.2 && numericValue < 0.4) imageNumber = 1;
+        else if (numericValue >= 0.4 && numericValue < 0.6) imageNumber = 2;
+        else if (numericValue >= 0.6 && numericValue < 0.8) imageNumber = 3;
+        else if (numericValue >= 0.8 && numericValue <= 1) imageNumber = 4;
+        imageUrl = `https://raw.githubusercontent.com/dignityc/prove_for_toolforge/main/${imageNumber}.png`;
+    }
+
+    var $healthIndicator = $('<span>').css({
+        'cursor': 'pointer',
+        'position': 'relative',
+        'display': 'inline-flex',
+        'align-items': 'center'
+    });
+    $healthIndicator.append('ProVe Score: ' + healthValue + ' ');
+    if (imageUrl) {
+        $healthIndicator.append(createProveIcon(imageUrl));
+    }
+
+    var supportsCount = summary.count.supportive || 0;
+    var refutesCount = summary.count.refuting || 0;
+    var notEnoughInfoCount = summary.count.inconclusive || 0;
+    var errors = summary.count.irretrievable || 0;
+    var totalCount = supportsCount + refutesCount + notEnoughInfoCount + errors;
+    var currentDateTime = new Date(summary.lastUpdate).toLocaleString('en-GB', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+    });
+
+    var hoverContent = `
+        ProVe v${summary.algoVersion}<br>
+        Last updated on ${currentDateTime}<br>
+        <span id="hover-non-authoritative" class="hover-item">
+            ${statusMapping["REFUTES"]}: ${refutesCount} (${(refutesCount / totalCount * 100).toFixed(1)}%)
+        </span>
+        <span id="hover-irrelevant" class="hover-item">
+            ${statusMapping["NOT ENOUGH INFO"]}: ${notEnoughInfoCount} (${(notEnoughInfoCount / totalCount * 100).toFixed(1)}%)
+        </span>
+        <span id="hover-support" class="hover-item">
+            ${statusMapping["SUPPORTS"]}: ${supportsCount} (${(supportsCount / totalCount * 100).toFixed(1)}%)
+        </span>
+        <span id="hover-irretrievable" class="hover-item">
+            ${statusMapping["error"]}: ${errors} (${(errors / totalCount * 100).toFixed(1)}%)
+        </span>
+    `;
+
+    attachHoverTooltip($healthIndicator, hoverContent, true);
+
+    var $proveLink = $('<a>')
+        .attr('href', 'https://www.wikidata.org/wiki/Wikidata:ProVe#How_ProVe_Works')
+        .attr('target', '_blank')
+        .attr('title', 'Click to visit Wikidata:ProVe page')
+        .append($healthIndicator);
+
+    $proveContainer.append($proveLink);
+    container.append($proveContainer);
+
+    var $button = $('<button id="prove-action-btn"></button>');
+    $button.text('Recompute').attr('title', 'Click to recompute ProVe data for this item');
+    attachRequestButtonHandler($button, 'Recompute', qid, totalStatements);
+    $proveContainer.append($button);
     return $proveContainer;
 }
 
@@ -334,19 +405,17 @@ function createPagination(data, tbody) {
     `)
     
     $element.find("#prevButton").click(function() {
-        if (page === 0);
-        else  page--;
-        document.getElementById("pageInfo").innerText = `${(page + 1)} of ${Math.ceil(data.length / pageSize)}`;
-        addRows(currentList, tbody);
-    })
+        if (page > 0) {
+            page--;
+            document.getElementById("pageInfo").innerText = `${(page + 1)} of ${Math.ceil(data.length / pageSize)}`;
+            addRows(currentList, tbody);
+        }
+    });
 
     $element.find("#nextButton").click(function() {
-        if (page === Math.ceil(data.length / pageSize) - 1);
-        else {
+        if (page < Math.ceil(data.length / pageSize) - 1) {
             page++;
-            var displayNumber = (page + 1);
-            if (displayNumber > data.length) displayNumber = data.length;
-            document.getElementById("pageInfo").innerText = `${displayNumber} of ${Math.ceil(data.length / pageSize)}`;
+            document.getElementById("pageInfo").innerText = `${(page + 1)} of ${Math.ceil(data.length / pageSize)}`;
             addRows(currentList, tbody);
         }
     });
@@ -377,21 +446,21 @@ function setPageSize(data, tbody) {
         pageSize = element.target.value;
         page = 0;
         addRows(currentList, tbody);
+        document.getElementById("pageInfo").innerText = `1 of ${Math.ceil(currentList.length / pageSize)}`;
     });
     return $pageSizeInput
 
 }
 
-function createProveTables(data, container, healthContainer) {
+function createProveTables(data, container, $toggleButton, $spinner) {
     const $statsContainer = displayStatementStats(data).hide();
-    const $buttonContainer = $('<div id="prove-buttons"></div>');
-    const $toggleButton = $('<button id="prove-toggle">Show/Hide Reference Results</button>');
     const $filterContainer = $('<div id="prove-filters" style="display: none;"></div>')
     const $tablesContainer = $('<div id="prove-tables" style="display: none;"></div>');
     const $paginationContainer = $('<div id="prove-pagination" style="display: none;"></div>')
 
-    $buttonContainer.append($toggleButton);
-    healthContainer.append($buttonContainer);
+    if ($spinner) $spinner.remove();
+    $toggleButton.prop('disabled', false);
+
     container.append($statsContainer).append($filterContainer);
     container.append($paginationContainer).append($tablesContainer);
 
@@ -430,28 +499,39 @@ function createProveTables(data, container, healthContainer) {
         transformedData.forEach((element) => addRow(element, tbody));
     });
 
+    const resultSortRank = { "error": 0, "REFUTES": 1, "NOT ENOUGH INFO": 2, "SUPPORTS": 3 };
+
+    function applyFiltersAndSort() {
+        let result = categoryData.filter((item) => !activeFilters.has(item.result));
+        const activeSortKey = Object.keys(sortOrder).find(k => sortOrder[k] !== undefined);
+        if (activeSortKey !== undefined) {
+            if (activeSortKey === 'result_status') {
+                result = result.sort((a, b) => (resultSortRank[a.result] ?? 99) - (resultSortRank[b.result] ?? 99));
+            } else {
+                result = result.sort((a, b) => (a[activeSortKey] || "").localeCompare(b[activeSortKey] || ""));
+            }
+            if (!sortOrder[activeSortKey]) result = result.reverse();
+        }
+        currentList = result;
+        tbody.empty();
+        addRows(currentList, tbody);
+    }
+
     $checkboxFilter.find(".prove-filters-checkbox").click(function() {
         const filterBy = $(this).data('filter');
         const checkbox = $(this).find("input");
         if (checkbox.is(':disabled')) return;
-        checkbox.prop('checked', (i, val) => !val);
+        checkbox.prop('checked', (_i, val) => !val);
         if (checkbox.is(":checked")) activeFilters.delete(filterBy);
         else activeFilters.add(filterBy);
-        let filteredData = [...currentList].filter((item) => !activeFilters.has(item.result));
-        tbody.empty();
-        currentList = filteredData;
-        addRows(filteredData, tbody);
+        applyFiltersAndSort();
     });
 
     table.find('th.sortable').click(function () {
         const sortBy = $(this).data('sort');
-        let sortedData = [...categoryData].sort((a, b) => (a[sortBy] || "").localeCompare(b[sortBy] || ""));;
-        if (!sortOrder[sortBy]) sortedData = sortedData.reverse();
         sortOrder[sortBy] = !sortOrder[sortBy];
         updateSortArrow(sortOrder[sortBy], sortBy);
-        tbody.empty();
-        currentList = sortedData;
-        addRows(sortedData, tbody);
+        applyFiltersAndSort();
     });
     table.find('th[data-sort="result_status"]').click();
 
@@ -617,16 +697,11 @@ function handleModify(item) {
 
     function checkForUrl(statementView, index) {
         var urlElement = statementView.querySelector(`a[href="${item.url}"]`);
-        var previousEditLink = urlElement.closest('.wikibase-statementview').querySelector('.wikibase-edittoolbar-container');
-		
-		if (previousEditLink) {
-		    highlightUrl(previousEditLink);
-		} else {
-		}
-        
+
         if (urlElement) {
+            var previousEditLink = urlElement.closest('.wikibase-statementview').querySelector('.wikibase-edittoolbar-container');
+            if (previousEditLink) highlightUrl(previousEditLink);
             highlightUrl(urlElement);
-            
         } else {
             processStatements(index + 1);
         }
@@ -650,7 +725,8 @@ function handleModify(item) {
 }
 
 function addStyles() {
-    $('<style>')
+    if ($('#prove-styles').length) return;
+    $('<style id="prove-styles">')
         .prop('type', 'text/css')
         .html(`
             #prove-container {
@@ -735,7 +811,6 @@ function addStyles() {
 			    cursor: pointer;
 			    font-size: 14px;
 			    background-color: #f8f9fa;
-			    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
 			    transition: background-color 0.3s ease; /* Smooth hover effect */
 			}
 			
@@ -896,6 +971,20 @@ function addStyles() {
             #hover-irretrievable {
                 background-color: ${colorMap["error"]};
             }
+            .prove-loading-spinner {
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                border: 2px solid #ccc;
+                border-top-color: #555;
+                border-radius: 50%;
+                animation: prove-spin 0.7s linear infinite;
+                vertical-align: middle;
+                margin-left: 6px;
+            }
+            @keyframes prove-spin {
+                to { transform: rotate(360deg); }
+            }
             /* Media Query for Smaller Screens */
             @media (max-width: 1000px) {
                 #prove-buttons {
@@ -920,8 +1009,6 @@ function( mw, $ ) {
      * Check if we're viewing an item
      */
     var entityID = mw.config.get( 'wbEntityId' );
-    var lang = mw.config.get( 'wgUserLanguage' );
-    var pageid = "48139757";
 
     if ( !entityID ) 
     {
@@ -952,7 +1039,7 @@ function( mw, $ ) {
         addStyles();
         
         // Check item api status
-        fetch(`https://kclwqt.sites.er.kcl.ac.uk//api/items/checkItemStatus?qid=${entityID}`)
+        fetch(`https://prove.wmcloud.org/api/items/checkItemStatus?qid=${entityID}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -997,42 +1084,11 @@ function( mw, $ ) {
                 
                 // Add image if available
                 if (imageUrl) {
-                    var $image = $('<img>')
-                        .attr('src', imageUrl)
-                        .css({
-                            'vertical-align': 'middle',
-                            'margin-left': '5px',
-                            'width': '20px',  
-                            'height': 'auto'  
-                        });
-                    
-                    $statusIndicator.append($image);
+                    $statusIndicator.append(createProveIcon(imageUrl));
                 }
                 
                 // Add hover functionality
-                $statusIndicator.hover(
-                    function() {
-                        var $hoverBox = $('<div>')
-                            .text(statusText)
-                            .css({
-                                position: 'absolute',
-                                top: 'calc(100% + 5px)',
-                                left: '50%',
-                                transform: 'translateX(-50%)',
-                                backgroundColor: 'white',
-                                border: '1px solid black',
-                                padding: '5px',
-                                zIndex: 1000,
-                                whiteSpace: 'nowrap',
-                                fontSize: '0.9em',
-                                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-                            });
-                        $(this).append($hoverBox);
-                    },
-                    function() {
-                        $(this).find('div').remove();
-                    }
-                );
+                attachHoverTooltip($statusIndicator, statusText, false);
                 
                 // Add status text to labelsParent
                 labelsParent.prepend($('<span>').text(statusText).css('margin-right', '10px'));
@@ -1056,41 +1112,7 @@ function( mw, $ ) {
                 
                 $button.text(buttonText).attr('title', hoverText);
                 
-                $button.click(() => {
-                    const apiUrl = `https://kclwqt.sites.er.kcl.ac.uk/api/requests/requestItem?qid=${entityID}`;
-                
-                    $button.prop('disabled', true).text('Processing...');
-                    
-                    fetch(apiUrl)
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error('Network response was not ok');
-                            }
-                            return response.json();
-                        })
-                        .then(responseData => {
-                            const estimatedComputationTimeMinutes = Math.ceil(totalStatements * 7.05 / 60);
-                
-                            // Custom alert messages for different button actions
-                            let alertMessage;
-                            if (buttonText === 'Compute') {
-                                alertMessage = `Your request for computation has been successfully queued. The estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
-                            } else if (buttonText === 'Recompute') {
-                                alertMessage = `Your request for recomputation has been successfully queued. The estimated recomputation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
-                            } else if (buttonText === 'Fetch Results') {
-                                alertMessage = `Your request for fetch has been successful. The updated estimated computation time is approximately ${estimatedComputationTimeMinutes} minutes. Please check back later for the updated scores or click the Fetch Results button to check the updated time remaining.`;
-                            }
-                
-                            alert(alertMessage);
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            alert(`Failed to ${buttonText.toLowerCase()} item. Please try again later.`);
-                        })
-                        .finally(() => {
-                            $button.prop('disabled', false).text(buttonText);
-                        });
-                });
+                attachRequestButtonHandler($button, buttonText, entityID, totalStatements);
                 
                 // Append status indicator and button to container
                 $proveContainer.append($statusIndicator);
@@ -1098,23 +1120,43 @@ function( mw, $ ) {
                 $indicators.append($proveContainer);
 
             } else {
-                // If status is complete, fetch ProVe data and initialize main functionality
-                fetch(`https://kclwqt.sites.er.kcl.ac.uk/api/items/getCompResult?qid=${entityID}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    const $container = $('<div id="prove-container"></div>');
-                    let healthContainer = updateProveHealthIndicator(data, entityID, $container);
-                    createProveTables(data, $container, healthContainer);
-                    labelsParent.append($container);
-                })
-                .catch(error => {
-                    console.error('Error fetching CompResult:', error);
-                    alert('An error occurred while fetching ProVe data. Please try again later.');
+                // Fire both requests in parallel
+                const $container = $('<div id="prove-container"></div>');
+                labelsParent.append($container);
+
+                const summaryPromise = fetch(`https://prove.wmcloud.org/api/items/summary?qid=${entityID}`)
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(summary => {
+                        const healthContainer = buildHealthIndicatorFromSummary(summary, entityID, $container);
+                        const $buttonContainer = $('<div id="prove-buttons"></div>');
+                        const $toggleButton = $('<button id="prove-toggle" disabled>Show/Hide Reference Results</button>');
+                        const $spinner = $('<span class="prove-loading-spinner"></span>');
+                        $toggleButton.append($spinner);
+                        $buttonContainer.append($toggleButton);
+                        healthContainer.append($buttonContainer);
+                        return { $toggleButton, $spinner };
+                    });
+
+                fetch(`https://prove.wmcloud.org/api/items/getCompResult?qid=${entityID}`)
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        summaryPromise.then(({ $toggleButton, $spinner }) => {
+                            setTimeout(() => createProveTables(data, $container, $toggleButton, $spinner), 0);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error fetching CompResult:', error);
+                        alert('An error occurred while fetching ProVe data. Please try again later.');
+                    });
+
+                summaryPromise.catch(error => {
+                    console.error('Error fetching summary:', error);
                 });
             }
         })
