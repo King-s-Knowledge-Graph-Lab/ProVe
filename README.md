@@ -42,7 +42,7 @@ The 'base' folder contains essential NLP models for the RQV tool, including pre-
 
 Download from:
 ```
-https://emckclac-my.sharepoint.com/:f:/r/personal/k2369089_kcl_ac_uk/Documents/base?csf=1&web=1&e=TBo3nE
+https://emckclac-my.sharepoint.com/:u:/g/personal/stty3154_kcl_ac_uk/IQDeSEYuxxRDSp-zJovVXvbRAVmhmXRw97g7D0eLmJIKyUs?e=Iq446V
 ```
 
 Place the downloaded 'base' folder in the project root directory.
