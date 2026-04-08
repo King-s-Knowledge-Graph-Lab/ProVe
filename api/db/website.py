@@ -1,3 +1,5 @@
+# @repo: api
+# @description: SQLAlchemy model for newsletter subscriber persistence (API web layer)
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
