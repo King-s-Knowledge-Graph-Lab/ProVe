@@ -1,3 +1,5 @@
+# @repo: api
+# @description: Standalone Flask app from a hackathon prototype — can be kept in the API repo as a legacy reference or removed
 import os, io, zipfile
 from flask import Flask, render_template, request
 from flask import redirect, url_for, session, send_from_directory, flash

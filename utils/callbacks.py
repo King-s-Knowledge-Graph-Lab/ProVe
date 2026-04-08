@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: PyTorch Lightning training callbacks (checkpointing, early stopping) — only relevant for model training, not inference
 import logging
 import os
 from pathlib import Path

@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: BERT-FEVER fine-tuned model for textual entailment classification (SUPPORTS / REFUTES / NOT ENOUGH INFO) — used by claim_entailment.py
 import json
 import numpy as np
 import pandas as pd

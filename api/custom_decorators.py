@@ -1,3 +1,5 @@
+# @repo: api
+# @description: Flask decorators for request logging (@log_request) and API key authentication (@api_required); includes StatsDBHandler for usage tracking
 from datetime import datetime, timezone
 from base64 import b64encode, b64decode
 from functools import wraps

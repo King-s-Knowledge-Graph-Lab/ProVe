@@ -1,3 +1,5 @@
+# @repo: api
+# @description: Collects and aggregates API usage statistics from MongoDB for reporting and the dashboard
 from collections import defaultdict
 from api.custom_decorators import StatsDBHandler
 import sys

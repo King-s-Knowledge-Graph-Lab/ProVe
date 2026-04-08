@@ -1,3 +1,5 @@
+# @repo: api
+# @description: Flask application entry point — defines all HTTP routes for result retrieval, queue management, and internal worker communication
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, jsonify, request, render_template_string

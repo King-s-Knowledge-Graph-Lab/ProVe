@@ -1,3 +1,5 @@
+# @repo: shared
+# @description: Centralised logging configuration (TimedRotatingFileHandler) — used by every module across API and processing
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import os

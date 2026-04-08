@@ -1,3 +1,5 @@
+# @repo: api
+# @description: Business logic layer for the API — aggregates and formats verification results, summaries, history, and queue stats from MongoDB
 from datetime import datetime
 from functools import partial
 from collections import defaultdict

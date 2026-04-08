@@ -180,3 +180,4 @@ api/secrets.py
 utils/secrets.py
 db/
 tmp/
+.claude/settings.local.json

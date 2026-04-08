@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Converts fetched HTML into candidate evidence sentences and ranks them by relevance using SentenceRetrievalModule + VerbModule
 import pandas as pd
 import nltk
 import html2text

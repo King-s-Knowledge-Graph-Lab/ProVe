@@ -1,3 +1,5 @@
+# @repo: shared
+# @description: MongoDB abstraction layer — manages all collections (html_content, entailment_results, status, queues); used by both API (reads) and processing (writes)
 from typing import Dict, Any, Callable, Union
 from datetime import datetime
 from bson import ObjectId

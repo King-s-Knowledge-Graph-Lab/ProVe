@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: BERT-based sentence relevance scorer — ranks candidate evidence sentences against a claim; used by EvidenceSelector in refs_html_to_evidences.py
 import re
 from typing import List, Tuple
 import pathlib

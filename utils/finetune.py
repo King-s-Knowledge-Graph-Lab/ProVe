@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: PyTorch Lightning training module (Graph2TextModule) for T5 fine-tuning — loaded by verbalisation_module at inference time
 #!/usr/bin/env python
 
 import argparse

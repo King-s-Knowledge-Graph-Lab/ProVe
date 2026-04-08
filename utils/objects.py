@@ -1,3 +1,5 @@
+# @repo: shared
+# @description: Dataclass definitions for shared data models (Status, HtmlContent, Entailment) — used for MongoDB serialisation/deserialisation by both API and processing
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Dict, Any

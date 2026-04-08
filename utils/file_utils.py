@@ -1,3 +1,5 @@
+# @repo: shared
+# @description: File/S3 download and local cache utilities (adapted from AllenNLP) — used by ML model loaders in processing
 """
 Utilities for working with the local dataset cache.
 This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp

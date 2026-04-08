@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: PyTorch Lightning base classes for sequence-to-sequence models — parent class for finetune.py Graph2TextModule
 import argparse
 import logging
 import os

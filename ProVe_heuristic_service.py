@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Alternative background worker that generates random QIDs via heuristics and enqueues them for processing
 import random
 import sys
 from typing import List

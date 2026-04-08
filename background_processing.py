@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Scheduled task management — fetches top-viewed Wikipedia items and pagepile lists to enqueue QIDs for processing
 from datetime import datetime, timedelta
 import random
 

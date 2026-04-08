@@ -1,3 +1,5 @@
+# @repo: shared
+# @description: RSA encryption/decryption for API key validation — used by the API decorator layer and by the processing service when authenticating queue requests
 from base64 import b64encode
 import os
 from typing import Union

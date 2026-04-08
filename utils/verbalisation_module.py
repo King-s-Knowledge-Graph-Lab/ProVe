@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: T5-based verbalisation model that converts Wikidata graph statements into natural language claims; used by EvidenceSelector
 from utils.finetune import Graph2TextModule
 from typing import Dict, List, Tuple, Union, Optional
 import torch

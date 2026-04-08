@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Background worker service — consumes queue items from the API, runs the pipeline, and writes results to MongoDB
 from datetime import datetime
 import time
 from threading import Lock

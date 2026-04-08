@@ -1,3 +1,5 @@
+# @repo: api
+# @description: Plotly/Dash visualization dashboard for API usage statistics (geographic distribution, monthly usage, KPIs)
 import json
 import pandas as pd
 import plotly.graph_objects as go

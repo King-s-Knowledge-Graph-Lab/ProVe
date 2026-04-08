@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Verifies textual entailment between Wikidata claims and evidence sentences using TextualEntailmentModule (BERT-FEVER)
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple

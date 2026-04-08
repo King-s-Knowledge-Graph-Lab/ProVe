@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Fetches HTML content from reference URLs (supports requests + Selenium), with batching and status tracking
 from typing import Dict, Any, List
 import yaml
 import requests

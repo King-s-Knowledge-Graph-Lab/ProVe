@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Orchestrates the full verification pipeline (parse → fetch HTML → extract evidence → check entailment)
 import pandas as pd
 
 from wikidata_parser import WikidataParser

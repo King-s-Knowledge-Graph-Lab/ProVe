@@ -1,3 +1,5 @@
+# @repo: api
+# @description: WSGI entry point for production deployment (sets sys.path and exposes the Flask app object)
 import os
 import sys
 import site

@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Extracts claims, property/object labels, and reference URLs from a Wikidata entity (QID)
 import ast
 import json
 from typing import List, Dict, Any

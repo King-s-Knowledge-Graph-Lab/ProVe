@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: Neural network architecture for sentence retrieval (BertForSequenceEncoder wrapper) — instantiated by SentenceRetrievalModule
 import torch
 import torch.nn as nn
 

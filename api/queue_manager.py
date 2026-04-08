@@ -1,3 +1,5 @@
+# @repo: api
+# @description: Manages task queue consistency for the API — tracks active requests, fetches next item, and handles resets on failure
 from collections import defaultdict
 from threading import BoundedSemaphore
 from typing import Any, Dict, Union

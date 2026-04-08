@@ -1,3 +1,5 @@
+# @repo: processing
+# @description: BERT model utilities (BertForSequenceEncoder) — backbone used by the sentence retrieval model architecture
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.

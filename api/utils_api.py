@@ -1,3 +1,5 @@
+# @repo: api
+# @description: API-specific utilities — rotating file logger and IP geolocation helper
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import os

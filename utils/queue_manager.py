@@ -1,3 +1,5 @@
+# @repo: shared
+# @description: Client-side queue utilities — sends authenticated requests to the API to enqueue or query QIDs; used by processing workers
 import requests
 import uuid
 import hashlib

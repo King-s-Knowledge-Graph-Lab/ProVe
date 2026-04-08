@@ -1,3 +1,5 @@
+# @repo: shared
+# @description: Wikidata API helpers with in-memory caching (CachedWikidataAPI) to reduce repeated entity lookups — used by wikidata_parser in processing
 import json
 import random
 import uuid
