@@ -19,6 +19,11 @@ dependencies = [
     "tqdm>=4.66",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
