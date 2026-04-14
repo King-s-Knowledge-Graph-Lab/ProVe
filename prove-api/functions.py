@@ -5,6 +5,7 @@ from functools import partial
 from collections import defaultdict
 from copy import deepcopy
 import json
+import logging
 import sqlite3
 from urllib.parse import urlparse
 import uuid
@@ -17,10 +18,11 @@ from plotly import io as pio
 from pymongo import collection
 import yaml
 
-from utils.logger import logger
-from utils.mongo_handler import MongoDBHandler
-from utils.mongo_handler import requestItemProcessing as request_processing
-from utils.objects import Status, HtmlContent, Entailment
+from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.mongo_handler import requestItemProcessing as request_processing
+from prove_shared.objects import Status, HtmlContent, Entailment
+
+logger = logging.getLogger("prove_api")
 
 mongo_handler = MongoDBHandler()
 

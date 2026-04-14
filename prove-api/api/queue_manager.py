@@ -11,7 +11,7 @@ from local_secrets import CODE_PATH, MAX_CONNECTIONS
 from utils_api import logger
 
 sys.path.append(CODE_PATH)
-from utils.mongo_handler import MongoDBHandler
+from prove_shared.mongo_handler import MongoDBHandler
 
 
 class QueueManager:

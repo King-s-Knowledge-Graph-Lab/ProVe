@@ -20,8 +20,8 @@ except ImportError:
     from api.local_secrets import CODE_PATH, SOURCE, API_KEY, PRIVATE_KEY
 
 sys.path.append(CODE_PATH)
-from utils.mongo_handler import MongoDBHandler
-from utils.auth import AsyncAuth
+from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.auth import AsyncAuth
 
 
 class StatsDBHandler(MongoDBHandler):

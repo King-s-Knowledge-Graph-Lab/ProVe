@@ -34,7 +34,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from utils.file_utils import cached_path
+from prove_shared.file_utils import cached_path
 
 logger = logging.getLogger(__name__)
 

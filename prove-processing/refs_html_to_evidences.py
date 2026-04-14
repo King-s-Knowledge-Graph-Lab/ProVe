@@ -1,6 +1,7 @@
 # @repo: processing
 # @description: Converts fetched HTML into candidate evidence sentences and ranks them by relevance using SentenceRetrievalModule + VerbModule
 import pandas as pd
+import logging
 import nltk
 import html2text
 import requests
@@ -9,7 +10,7 @@ from utils.verbalisation_module import VerbModule
 from utils.sentence_retrieval_module import SentenceRetrievalModule
 import numpy as np
 
-from utils.logger import logger
+logger = logging.getLogger("prove_processing")
 
 
 class HTMLSentenceProcessor:

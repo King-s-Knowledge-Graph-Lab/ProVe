@@ -1,6 +1,7 @@
 # @repo: processing
 # @description: Background worker service — consumes queue items from the API, runs the pipeline, and writes results to MongoDB
 from datetime import datetime
+import logging
 import time
 from threading import Lock
 from typing import List, Dict, Any, Union
@@ -20,10 +21,11 @@ from background_processing import (
     process_pagepile_list,
 )
 import ProVe_main_process
-from utils.logger import logger
-from utils.mongo_handler import MongoDBHandler
-from utils.local_secrets import ENDPOINT, API_KEY
-from utils.auth import AsyncAuth
+from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.local_secrets import ENDPOINT, API_KEY
+from prove_shared.auth import AsyncAuth
+
+logger = logging.getLogger("prove_processing")
 
 
 try:

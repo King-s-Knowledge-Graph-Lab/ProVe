@@ -1,6 +1,7 @@
 # @repo: processing
 # @description: Fetches HTML content from reference URLs (supports requests + Selenium), with batching and status tracking
 from typing import Dict, Any, List
+import logging
 import yaml
 import requests
 import time
@@ -9,7 +10,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import pandas as pd
 
-from utils.logger import logger
+logger = logging.getLogger("prove_processing")
 
 
 def load_config(config_path: str) -> Dict[str, Any]:

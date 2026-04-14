@@ -9,7 +9,7 @@ from utils.textual_entailment_module import TextualEntailmentModule
 from tqdm import tqdm
 from datetime import datetime
 
-from utils.logger import logger
+logger = logging.getLogger("prove_processing")
 
 class ClaimEntailmentChecker:
     def __init__(self, config_path: str = 'config.yaml', text_entailment=None):

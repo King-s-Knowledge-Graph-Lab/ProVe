@@ -1,12 +1,14 @@
 # @repo: processing
 # @description: Alternative background worker that generates random QIDs via heuristics and enqueues them for processing
 import random
+import logging
 import sys
 from typing import List
 
 from background_processing import process_system_qid
 from ProVe_main_service import ProVeService
-from utils.logger import logger
+
+logger = logging.getLogger("prove_processing")
 
 
 class HeuristicBasedService(ProVeService):

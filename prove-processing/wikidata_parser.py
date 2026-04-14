@@ -2,6 +2,7 @@
 # @description: Extracts claims, property/object labels, and reference URLs from a Wikidata entity (QID)
 import ast
 import json
+import logging
 from typing import List, Dict, Any
 
 import nltk
@@ -16,7 +17,7 @@ from qwikidata.linked_data_interface import (
     InvalidEntityId
 )
 
-from utils.logger import logger
+logger = logging.getLogger("prove_processing")
 
 
 def get_entity_dict_from_api(

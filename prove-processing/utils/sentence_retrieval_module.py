@@ -1,6 +1,7 @@
 # @repo: processing
 # @description: BERT-based sentence relevance scorer — ranks candidate evidence sentences against a claim; used by EvidenceSelector in refs_html_to_evidences.py
 import re
+import logging
 from typing import List, Tuple
 import pathlib
 
@@ -8,7 +9,8 @@ import torch
 from transformers import BertTokenizer
 
 from utils.sentence_retrieval_model import sentence_retrieval_model
-from utils.logger import logger
+
+logger = logging.getLogger("prove_processing")
 
 THIS_DIR = pathlib.Path(__file__).parent.absolute()
 ARGS = {

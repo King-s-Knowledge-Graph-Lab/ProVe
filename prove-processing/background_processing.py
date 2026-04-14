@@ -1,14 +1,16 @@
 # @repo: processing
 # @description: Scheduled task management — fetches top-viewed Wikipedia items and pagepile lists to enqueue QIDs for processing
 from datetime import datetime, timedelta
+import logging
 import random
 
 import pandas as pd
 import requests
 import yaml
 
-from utils.logger import logger
-from utils.mongo_handler import MongoDBHandler, requestItemProcessing
+from prove_shared.mongo_handler import MongoDBHandler, requestItemProcessing
+
+logger = logging.getLogger("prove_processing")
 
 
 # Load config
