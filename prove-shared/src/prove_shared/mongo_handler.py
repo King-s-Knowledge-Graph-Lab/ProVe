@@ -9,7 +9,7 @@ import uuid
 import pandas as pd
 from pymongo import MongoClient, collection, database, ReturnDocument
 
-from utils.logger import logger
+from .logger import logger
 
 
 class MongoDBHandler:

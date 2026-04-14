@@ -11,7 +11,7 @@ if not os.path.exists(LOG_PATH):
     try:
         os.makedirs(LOG_PATH, exist_ok=True)
     except PermissionError:
-        LOG_PATH = "./logs/backend/"
+        LOG_PATH = "./logs/prove_shared/"
         os.makedirs(LOG_PATH, exist_ok=True)
 
 logger = logging.getLogger("ProVe")

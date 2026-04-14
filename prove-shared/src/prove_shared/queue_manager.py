@@ -4,8 +4,8 @@ import requests
 import uuid
 import hashlib
 
-from local_secrets import ENDPOINT, API_KEY
-from auth import AsyncAuth
+from .local_secrets import ENDPOINT, API_KEY
+from .auth import AsyncAuth
 
 class QueueManager:
     def __init__(self, queue_name: str):
