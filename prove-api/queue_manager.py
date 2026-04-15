@@ -3,14 +3,16 @@
 from collections import defaultdict
 from threading import BoundedSemaphore
 from typing import Any, Dict, Union
-import sys
 
 from pymongo import collection
 
-from local_secrets import CODE_PATH, MAX_CONNECTIONS
-from utils_api import logger
+try:
+    from local_secrets import MAX_CONNECTIONS
+    from utils_api import logger
+except ImportError:
+    from api.local_secrets import MAX_CONNECTIONS
+    from api.utils_api import logger
 
-sys.path.append(CODE_PATH)
 from prove_shared.mongo_handler import MongoDBHandler
 
 

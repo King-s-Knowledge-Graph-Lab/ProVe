@@ -167,6 +167,8 @@ entity_cache.p
 wikidata_claims_refs_parsed.db
 results.csv
 *.sh
+!prove-api/scripts/*.sh
+!prove-processing/scripts/*.sh
 API_key.txt
 *.out
 CodeArchive/
@@ -178,6 +180,7 @@ output.log2.gz
 tester.py
 api/secrets.py
 utils/secrets.py
+**/local_secrets.py
 db/
 tmp/
 .claude/settings.local.json
