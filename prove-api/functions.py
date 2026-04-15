@@ -5,7 +5,6 @@ from functools import partial
 from collections import defaultdict
 from copy import deepcopy
 import json
-import logging
 import sqlite3
 from urllib.parse import urlparse
 import uuid
@@ -17,6 +16,8 @@ from plotly import graph_objects as go
 from plotly import io as pio
 from pymongo import collection
 import yaml
+
+import logging
 
 from prove_shared.mongo_handler import MongoDBHandler
 from prove_shared.mongo_handler import requestItemProcessing as request_processing
@@ -839,6 +840,9 @@ def get_config_as_json():
 
 
 def process_reference(url: str, claim: str):
+    # TODO: This function imports from prove-processing (inference side).
+    # Once the split is complete, this endpoint should call prove-processing via HTTP API
+    # instead of direct Python imports.
     import nltk
     import requests
     import pandas as pd

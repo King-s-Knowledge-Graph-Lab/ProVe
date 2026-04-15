@@ -1,18 +1,19 @@
 # @repo: api
 # @description: Collects and aggregates API usage statistics from MongoDB for reporting and the dashboard
 from collections import defaultdict
-from api.custom_decorators import StatsDBHandler
-import sys
 from tqdm import tqdm
 import time
 import numpy as np
 
-from api.local_secrets import CODE_PATH
-from api.utils_api import get_ip_location
+try:
+    from custom_decorators import StatsDBHandler
+    from utils_api import get_ip_location
+except ImportError:
+    from api.custom_decorators import StatsDBHandler
+    from api.utils_api import get_ip_location
 
-sys.path.append(CODE_PATH)
 from pymongo import MongoClient
-from ProVe_main_service import MongoDBHandler
+from prove_shared.mongo_handler import MongoDBHandler
 
 
 class TMPStatsDBHandler(MongoDBHandler):

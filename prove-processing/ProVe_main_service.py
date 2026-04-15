@@ -25,6 +25,8 @@ from prove_shared.mongo_handler import MongoDBHandler
 from prove_shared.local_secrets import ENDPOINT, API_KEY
 from prove_shared.auth import AsyncAuth
 
+# TODO: Approach for logging to be decided — not using prove_shared logger for now,
+# each service sets up its own minimal logging.
 logger = logging.getLogger("prove_processing")
 
 
@@ -229,6 +231,9 @@ class ProVeService:
                 self.mongo_handler.save_status(status_dict)
                 logger.info("Updated new status_dict into status")
                 try:
+                    # TODO: This imports from prove-api (user service side).
+                    # Once the split is complete, this should call prove-api via HTTP API
+                    # instead of direct Python imports.
                     from functions import get_summary
                     get_summary(qid, update=True)
                 except Exception:

@@ -4,22 +4,19 @@ from datetime import datetime, timezone
 from base64 import b64encode, b64decode
 from functools import wraps
 from flask import request
-import os
 import threading
 import time
 from typing import Any, Union
-import sys
 
 from pymongo import MongoClient
 
 try:
     from utils_api import get_ip_location, logger
-    from local_secrets import CODE_PATH, SOURCE, API_KEY, PRIVATE_KEY
+    from local_secrets import SOURCE, API_KEY, PRIVATE_KEY
 except ImportError:
     from api.utils_api import get_ip_location, logger
-    from api.local_secrets import CODE_PATH, SOURCE, API_KEY, PRIVATE_KEY
+    from api.local_secrets import SOURCE, API_KEY, PRIVATE_KEY
 
-sys.path.append(CODE_PATH)
 from prove_shared.mongo_handler import MongoDBHandler
 from prove_shared.auth import AsyncAuth
 

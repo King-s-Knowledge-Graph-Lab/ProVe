@@ -5,14 +5,16 @@ from pathlib import Path
 from flask import Flask, jsonify, request, render_template_string
 from flask_cors import CORS
 from flasgger import Swagger, swag_from
-import sys
 import json
 
-from custom_decorators import log_request, api_required, AsyncAuth
-from local_secrets import CODE_PATH
-from queue_manager import QueueManager
+try:
+    from custom_decorators import log_request, api_required
+    from queue_manager import QueueManager
+except ImportError:
+    from api.custom_decorators import log_request, api_required
+    from api.queue_manager import QueueManager
 
-sys.path.append(CODE_PATH)
+from prove_shared.auth import AsyncAuth
 import functions
 
 

@@ -8,7 +8,10 @@ from werkzeug.utils import secure_filename
 from hashlib import sha256
 from db.website import db, NewsletterSubscriber
 from db.website import User, Submission
-from local_secrets import UPLOAD_FOLDER, ALLOWED_EXTENSIONS
+try:
+    from local_secrets import UPLOAD_FOLDER, ALLOWED_EXTENSIONS
+except ImportError:
+    from api.local_secrets import UPLOAD_FOLDER, ALLOWED_EXTENSIONS
 
 app.secret_key = sha256(os.urandom(16)).hexdigest()
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
