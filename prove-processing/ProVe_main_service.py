@@ -21,7 +21,7 @@ from background_processing import (
     process_pagepile_list,
 )
 import ProVe_main_process
-from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.database import get_database
 from prove_shared.local_secrets import ENDPOINT, API_KEY
 from prove_shared.auth import AsyncAuth
 
@@ -158,11 +158,15 @@ class ProVeService:
         for attempt in range(max_retries):
             try:
                 logger.info("Attempting to initialize resources...")
-                self.mongo_handler = MongoDBHandler()
-                logger.info("WikiDataMongoDB connection successful")
+                # Backend chosen by config.yaml (Mongo today, Postgres later).
+                self.mongo_handler = get_database()
+                logger.info("Database connection successful")
 
                 logger.info("Initializing queues...")
-                # Initialize priority queue
+                # TODO (Phase 3): this still expects a pymongo Collection via
+                # attribute access (e.g. `.user_collection`). Once every
+                # consumer uses queue *names* instead of Collection objects,
+                # this `getattr` dance can be replaced with `queue_name` strings.
                 priority_queue = getattr(self.mongo_handler, self.priority_queue, None)
                 if priority_queue is None:
                     exception = f"Priority queue '{self.priority_queue}'"
@@ -248,36 +252,32 @@ class ProVeService:
 
     def retry_processing(self, queue: collection) -> None:
         """
-        Retry processing items in the queue that are stuck in 'processing' state.
+        Retry items in `queue` that are stuck in 'processing'.
+
+        Reads and writes both route through the shared handler now, so this
+        method is identical for Mongo and (future) Postgres. The retry limit
+        is intentionally hard-coded here — it's a service-policy constant,
+        not a DB concern.
 
         Args:
-            queue (collection): The MongoDB collection representing the queue to check.
+            queue: The queue to sweep. May be a pymongo Collection (legacy
+                `self.priority_queue` / `self.secondary_queue` entries) — the
+                handler's `_resolve_queue` accepts both.
         """
         retry_limit = 3
 
-        # Find items that are in processing state
-        stuck_items = queue.find({
-            'status': 'processing'
-        })
+        # Items currently stuck in 'processing' — candidates to retry or fail.
+        stuck_items = self.mongo_handler.get_queue_items(queue, status='processing')
 
         for item in stuck_items:
-            # Check the number of retries
             if item.get('retry_count', 0) < retry_limit:
                 logger.info(f"Retrying QID {item['qid']}...")
-                # Increment the retry count
-                queue.update_one(
-                    {'_id': item['_id']},
-                    {'$set': {'retry_count': item.get('retry_count', 0) + 1}}
-                )
-                # Reprocess the item
+                # Atomic `$inc` inside the handler — no lost-update race.
+                self.mongo_handler.increment_retry_by_id(queue, item['_id'])
                 self.main_loop(item)
             else:
                 logger.error(f"QID {item['qid']} has reached the maximum retry limit.")
-                # Update the status to error if retry limit is reached
-                queue.update_one(
-                    {'_id': item['_id']},
-                    {'$set': {'status': 'error', 'error_message': 'Max retry limit reached'}}
-                )
+                self.mongo_handler.mark_queue_item_error_by_id(queue, item['_id'])
 
     def run(self):
         """
@@ -340,10 +340,19 @@ class ProVeService:
             sys.exit(1)
 
     def update_request(self, queue, status_dict, status):
+        """
+        Flip the `status` field on the (task_id, qid) row in `queue`.
+
+        Called from the main loop to mark a job 'completed' once processing
+        finishes. The handler does the write so this method stays backend-
+        agnostic.
+        """
         logger.info(f"Updating {status_dict['qid']} for {queue.name}")
-        queue.update_one(
-            {'task_id': status_dict['task_id'], 'qid': status_dict['qid']},
-            {'$set': {'status': status}}
+        self.mongo_handler.update_queue_status_by_task_and_qid(
+            queue_name=queue,
+            task_id=status_dict['task_id'],
+            qid=status_dict['qid'],
+            status=status,
         )
         logger.info(f"Updated {status_dict['qid']} original request with {status}")
 

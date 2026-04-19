@@ -1,7 +1,6 @@
 # @repo: api
 # @description: Business logic layer for the API — aggregates and formats verification results, summaries, history, and queue stats from MongoDB
 from datetime import datetime
-from functools import partial
 from collections import defaultdict
 from copy import deepcopy
 import json
@@ -10,22 +9,24 @@ from urllib.parse import urlparse
 import uuid
 from typing import Dict, Any, List
 
+import logging
+
 import pandas as pd
 from plotly.subplots import make_subplots
 from plotly import graph_objects as go
 from plotly import io as pio
-from pymongo import collection
 import yaml
 
-import logging
-
-from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.database import get_database
 from prove_shared.mongo_handler import requestItemProcessing as request_processing
 from prove_shared.objects import Status, HtmlContent, Entailment
 
 logger = logging.getLogger("prove_api")
 
-mongo_handler = MongoDBHandler()
+# Resolve the active backend once per process. `get_database()` reads
+# `config.yaml` and returns either a bare MongoDBHandler, a PostgreSQLHandler,
+# or a DatabaseOrchestrator wrapping both — callers never need to know which.
+mongo_handler = get_database()
 
 # Params
 def load_config(config_path: str):
@@ -113,24 +114,23 @@ def get_full_data(db_path, table_name):
 #1.1. check the aggregated results for an item (only recent one)
 def GetItem(target_id):
     try:
-        # Check status in MongoDB
-        mongo_status = mongo_handler.status_collection.find_one(
-            {'qid': target_id},
-            sort=[('requested_timestamp', -1)]
-        )
-        
+        # Check status in MongoDB — delegated to handler so backend swaps cleanly later.
+        mongo_status = mongo_handler.get_latest_status_by_qid(target_id)
+
         if mongo_status:
             task_id = mongo_status['task_id']
-            
-            # 1. Get initial data structure from html_content collection
-            html_contents = list(mongo_handler.html_collection.find(
-                {'task_id': task_id},
-                {
-                    'object_id': 1, 'property_id': 1, 'url': 1, 
+
+            # 1. Get initial data structure from html_content collection.
+            # Projection kept here (not moved into the handler default) because
+            # it's specific to this view's UI shape; the handler stays generic.
+            html_contents = mongo_handler.get_html_by_task_id(
+                task_id,
+                fields={
+                    'object_id': 1, 'property_id': 1, 'url': 1,
                     'entity_label': 1, 'property_label': 1, 'object_label': 1,
-                    'reference_id': 1, 'lang': 1, 'status': 1, '_id': 0
-                }
-            ))
+                    'reference_id': 1, 'lang': 1, 'status': 1, '_id': 0,
+                },
+            )
             
             # 2. Transform data structure with new keys and create triple
             result_items = []
@@ -154,11 +154,11 @@ def GetItem(target_id):
                     result_items.append(item)
                     continue
                 
-                # 4. Query entailment results using temporary variables
-                entailment_results = list(mongo_handler.entailment_collection.find({
-                    'task_id': task_id,
-                    'reference_id': temp_ref_id
-                }))
+                # 4. Query entailment results for this (task, reference) pair.
+                entailment_results = mongo_handler.get_entailments_by_task_and_reference(
+                    task_id=task_id,
+                    reference_id=temp_ref_id,
+                )
                 
                 if entailment_results:
                     # Group by result type and get highest score
@@ -203,10 +203,7 @@ def GetItem(target_id):
 def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[Dict[str, Any]]:
     try:
         if task_id is None:
-            status = mongo_handler.status_collection.find_one(
-                {'qid': target_id},
-                sort=[('requested_timestamp', -1)]
-            )
+            status = mongo_handler.get_latest_status_by_qid(target_id)
 
             if not status:
                 return get_item_from_sqlite(target_id)
@@ -214,7 +211,8 @@ def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[D
             status = Status(**status)
             task_id = status.task_id
 
-        html_contents = mongo_handler.html_collection.find({"task_id": task_id})
+        # Fetch all HTML rows for this task (no projection — caller wants the full doc).
+        html_contents = mongo_handler.get_html_by_task_id(task_id)
 
         items = []
         if html_contents:
@@ -225,20 +223,13 @@ def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[D
                 if html_content.status == 200
             ]
 
-            entailmments = mongo_handler.entailment_collection.aggregate([
-                {"$match": {
-                    "task_id": task_id,
-                    "reference_id": {"$in": [item.reference_id for item in iterable_items]}
-                }},
-                {"$sort": {"text_entailment_score": -1}},
-                {"$group": {
-                    "_id": {
-                        "reference_id": "$reference_id",
-                        "result": "$result"
-                    },
-                    "docs": {"$push": "$$ROOT"}
-                }}
-            ])
+            # Server-side aggregation: group top entailment scores per (reference, result).
+            # The pipeline lives in the handler; this call site only knows the inputs
+            # it needs (task_id + the references it actually cares about).
+            entailmments = mongo_handler.aggregate_entailments_by_task_id(
+                task_id=task_id,
+                reference_ids=[item.reference_id for item in iterable_items],
+            )
 
             entailmments_by_ref = defaultdict(lambda: defaultdict(list))
             for entailmment in entailmments:
@@ -304,8 +295,8 @@ def get_item_from_sqlite(target_id):
 
 def CheckItemStatus(target_id):
     try:
-        # Check MongoDB status collection first
-        mongo_statuses = list(mongo_handler.status_collection.find({'qid': target_id}))
+        # Check MongoDB status collection first — unsorted; we scan in-memory below.
+        mongo_statuses = mongo_handler.get_statuses_by_qid(target_id)
         
         if mongo_statuses:
             # Get the latest timestamp for each status, handling None values
@@ -349,7 +340,8 @@ def CheckItemStatus(target_id):
 
 
 def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
-    result = mongo_handler.summary_collection.find_one({'_id': target_id})
+    # Cached summary lookup — None means "no summary computed yet".
+    result = mongo_handler.get_summary_by_id(target_id)
     summary = deepcopy(result)
 
     if result is None or update:
@@ -365,10 +357,10 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
         task_id = item.get("task_id")
         counter = pd.DataFrame(information[1:])
 
-        total_claims = mongo_handler.stats_collection.find_one(
-            {'task_id': task_id, 'entity_id': target_id},
-            {'total_claims': 1, '_id': 0}
-        ).get('total_claims', None)
+        # Default projection in the handler is {'total_claims': 1, '_id': 0},
+        # matching every call site in this file — no projection needed here.
+        stats = mongo_handler.get_parser_stats_by_task_and_entity(task_id, target_id)
+        total_claims = (stats or {}).get('total_claims')
 
         version = item.get('algo_version', 'Not processed yet')
         last_update = item.get('start_time', 'Not processed yet')
@@ -382,7 +374,8 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
         if len(information) < 2 or information[1].get('Result') == 'No available URLs':
             result['status'] = 'No available URLs'
             result['proveScore'] = 1.
-            mongo_handler.summary_collection.insert_one({'_id': target_id, **result})
+            # Upsert is idempotent and race-safe, unlike the old insert/update split.
+            mongo_handler.upsert_summary_by_id(target_id, result)
             return result
 
         refuting_count = counter[counter['result'] == 'REFUTES'].shape[0]
@@ -402,10 +395,9 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
             }
         })
 
-        if not update or (update and summary is None):
-            mongo_handler.summary_collection.insert_one({'_id': target_id, **result})
-        else:
-            mongo_handler.summary_collection.update_one({'_id': target_id}, {'$set': result})
+        # Single upsert path — the previous insert-or-update branching was
+        # race-prone when two workers raced on the same missing summary.
+        mongo_handler.upsert_summary_by_id(target_id, result)
     else:
         result.pop('_id', None)
 
@@ -432,14 +424,17 @@ def get_history(
         total_counts = sum([refuting_count, inconclusive_count, supportive_count, irretrievable_count])
         prove_score = (supportive_count - refuting_count) / total_counts if total_counts else None
 
+        # Parser-stats lookup via the handler. The handler returns None if the
+        # document doesn't exist, so guard with `or {}` before `.get`.
+        stats = mongo_handler.get_parser_stats_by_task_and_entity(
+            task_id=job.task_id,
+            entity_id=target_id,
+        )
         return {
             "algoVersion": job.algo_version,
             "lastUpdate": job.requested_timestamp.isoformat(),
             "status": job.status,
-            "totalClaims": mongo_handler.stats_collection.find_one(
-                {'task_id': job.task_id, 'entity_id': target_id},
-                {'total_claims': 1, '_id': 0}
-            ).get('total_claims', None),
+            "totalClaims": (stats or {}).get('total_claims'),
             "proveScore": prove_score,
             "count": {
                 "refuting": refuting_count,
@@ -449,7 +444,12 @@ def get_history(
             }
         }
 
-    jobs = mongo_handler.status_collection.find({'qid': target_id}).sort("completed_timestamp", -1)
+    # All statuses for this QID, newest-first by completion time.
+    jobs = mongo_handler.get_statuses_by_qid(
+        target_id,
+        sort_by='completed_timestamp',
+        descending=True,
+    )
     if jobs:
         jobs = [Status(**job) for job in jobs]
         jobs = [job for job in jobs if job.status == 'completed']
@@ -502,11 +502,8 @@ def comprehensive_results(target_id):
     task_id = first_item['task_id']
     qid = first_item['qid']
     
-    # Fetch total_claims from parser_stats collection
-    parser_stats = mongo_handler.stats_collection.find_one(
-        {'task_id': task_id, 'entity_id': qid},
-        {'total_claims': 1, '_id': 0}
-    )
+    # Fetch total_claims via the handler (default projection already matches).
+    parser_stats = mongo_handler.get_parser_stats_by_task_and_entity(task_id, qid)
     
     total_claims = parser_stats['total_claims'] if parser_stats else None
     
@@ -556,9 +553,13 @@ def comprehensive_results(target_id):
 #2. status
 #2.1. checkQueue
 def checkQueue():
-    in_queue = mongo_handler.user_collection.find(
-        {'status': 'in queue'},
-        sort=[('requested_timestamp', 1)]
+    # Pending items on the user queue, oldest-first so the UI shows an honest
+    # FIFO view of what's currently waiting.
+    in_queue = mongo_handler.get_queue_items(
+        queue_name='user',
+        status='in queue',
+        sort_by='requested_timestamp',
+        ascending=True,
     )
 
     items = []
@@ -611,17 +612,19 @@ def check_queue_status(conn, qid):
 
 
 def requestItemProcessing(qid: str):
-    """Request processing for a specific QID"""
-    save_function = partial(
-        mongo_handler.save_status,
-        queue=mongo_handler.user_collection,
-    )
+    """
+    Request processing for a specific QID.
+
+    Routes through the shared `request_processing` helper (alias for
+    `requestItemProcessing` in prove-shared), passing the handler instance
+    and a queue *name* — no more callback plumbing.
+    """
     return request_processing(
         qid=qid,
+        queue='user',
+        db=mongo_handler,
         algo_version=algo_version,
-        request_type="userRequested",
-        queue=mongo_handler.user_collection,
-        save_function=save_function
+        request_type='userRequested',
     )
 
 
