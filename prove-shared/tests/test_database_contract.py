@@ -1,8 +1,8 @@
 """
-Backend-agnostic contract tests for `DatabaseInterface`.
+Backend-agnostic contract tests for `DataStore` (ABC).
 
 These tests are the "nothing broke after we switched backend" safety net. Each
-test takes a `db` fixture that returns a `DatabaseInterface` implementation —
+test takes a `db` fixture that returns a `DataStore` (ABC) implementation —
 today parameterised only over `MongoDBHandler`, but when `PostgreSQLHandler`
 lands we add its fixture and the entire suite runs against both backends
 automatically.
@@ -23,7 +23,7 @@ from unittest.mock import MagicMock
 import pytest
 from bson import ObjectId
 
-from prove_shared.database.interface import DatabaseInterface
+from prove_shared.database.interface import DataStore
 from prove_shared.database.mongo import MongoDBHandler
 
 
@@ -154,11 +154,11 @@ def db(request, mongo_backend):
 
 
 # ===========================================================================
-# Contract: every implementation satisfies DatabaseInterface
+# Contract: every implementation satisfies DataStore (ABC)
 # ===========================================================================
-def test_backend_implements_database_interface(db):
-    """Every backend must be a DatabaseInterface instance."""
-    assert isinstance(db, DatabaseInterface)
+def test_backend_implements_datastore(db):
+    """Every backend must be a DataStore (ABC) instance."""
+    assert isinstance(db, DataStore)
 
 
 # ===========================================================================

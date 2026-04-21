@@ -1,7 +1,7 @@
 # @repo: shared
-# @description: Abstract base class defining the database contract. Every backend (Mongo, Postgres) must implement this so the orchestrator can swap them at runtime.
+# @description: DataStore (ABC) — the database contract. Every backend (Mongo, Postgres) must implement this so the orchestrator can swap them at runtime.
 """
-DatabaseInterface — the single contract every backend implements.
+DataStore (ABC) — the single contract every backend implements.
 
 Why it exists:
     We're migrating from MongoDB to PostgreSQL (MongoDB is not compliant with
@@ -9,10 +9,10 @@ Why it exists:
     driven, backward-compatible, and reversible — which means application
     code must never couple to a specific backend.
 
-    This interface is the boundary. Callers depend on this ABC; concrete
-    implementations (`MongoDBHandler`, `PostgreSQLHandler`) depend on it too.
-    The `DatabaseOrchestrator` wraps whichever implementation the YAML config
-    selects at runtime.
+    This contract is the boundary. Callers depend on `DataStore` (ABC);
+    concrete implementations (`MongoDBHandler`, `PostgreSQLHandler`)
+    implement it. The `DatabaseOrchestrator` wraps whichever implementation
+    the YAML config selects at runtime.
 
 Naming convention:
     * `get_<thing>_by_<key>(...)`   — single keyed lookup, returns Optional[dict]
@@ -44,7 +44,7 @@ import pandas as pd
 QueueRef = Union[str, Any]
 
 
-class DatabaseInterface(ABC):
+class DataStore(ABC):
     """
     Contract every ProVe database backend must implement.
 

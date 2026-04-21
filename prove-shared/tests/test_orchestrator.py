@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from prove_shared.database.interface import DatabaseInterface
+from prove_shared.database.interface import DataStore
 from prove_shared.database.orchestrator import (
     DatabaseOrchestrator,
     _build_from_config,
@@ -23,10 +23,10 @@ from prove_shared.database.orchestrator import (
 # Helpers
 # ---------------------------------------------------------------------------
 def _make_backend_mock() -> MagicMock:
-    """A MagicMock that passes `isinstance(x, DatabaseInterface)`."""
-    # `spec=DatabaseInterface` makes MagicMock only accept interface methods
+    """A MagicMock that passes `isinstance(x, DataStore)`."""
+    # `spec=DataStore` makes MagicMock only accept interface methods
     # AND makes isinstance() work correctly.
-    return MagicMock(spec=DatabaseInterface)
+    return MagicMock(spec=DataStore)
 
 
 @pytest.fixture(autouse=True)

@@ -1,11 +1,11 @@
 # @repo: shared
-# @description: MongoDB implementation of DatabaseInterface — owns every pymongo call in the codebase. Every other module accesses the DB through the methods defined here.
+# @description: MongoDB implementation of DataStore (ABC) — owns every pymongo call in the codebase. Every other module accesses the DB through the methods defined here.
 """
 MongoDB backend for the ProVe database layer.
 
 This module is the *only* place in the codebase that may import from pymongo
 or instantiate `MongoClient`. Every other module accesses the database through
-the `DatabaseInterface` methods defined here.
+the `DataStore` methods defined here.
 
 Design notes:
     * Inputs are plain Python types (str, dict, list). No BSON leaks out.
@@ -27,7 +27,7 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 
 from ..logger import logger
-from .interface import DatabaseInterface
+from .interface import DataStore
 
 
 # ---------------------------------------------------------------------------
@@ -41,9 +41,9 @@ _USAGE_DB_PROD = "service_usage"
 _USAGE_DB_DEV = "tmp_service_usage"  # dev/analysis mirror of prod usage data
 
 
-class MongoDBHandler(DatabaseInterface):
+class MongoDBHandler(DataStore):
     """
-    MongoDB implementation of `DatabaseInterface`.
+    MongoDB implementation of `DataStore` (ABC).
 
     Owns all pymongo state for the process. The public methods form the
     contract the future `PostgreSQLHandler` also implements, so the

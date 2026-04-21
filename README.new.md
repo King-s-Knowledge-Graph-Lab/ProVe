@@ -93,7 +93,7 @@ prove-shared/
       wikidata_utils.py
       database/
         __init__.py
-        interface.py     # DatabaseInterface ABC (the contract)
+        interface.py     # DataStore (ABC) — the contract
         mongo.py         # MongoDBHandler implementation
         postgres.py      # PostgreSQLHandler stub
         orchestrator.py  # get_database() + DatabaseOrchestrator

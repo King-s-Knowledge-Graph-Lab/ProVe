@@ -1,7 +1,7 @@
 # @repo: shared
-# @description: PostgreSQL implementation of DatabaseInterface. Stub — all methods raise NotImplementedError until the migration work begins.
+# @description: PostgreSQL implementation of DataStore (ABC). Stub — all methods raise NotImplementedError until the migration work begins.
 """
-PostgreSQLHandler — placeholder implementation of `DatabaseInterface`.
+PostgreSQLHandler — placeholder implementation of `DataStore` (ABC).
 
 This class exists so the interface is provably pluggable today: the
 orchestrator can be constructed with it, tests can mock it, and future work
@@ -58,7 +58,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from .interface import DatabaseInterface, QueueRef
+from .interface import DataStore, QueueRef
 
 
 def _not_implemented(method_name: str) -> NotImplementedError:
@@ -69,7 +69,7 @@ def _not_implemented(method_name: str) -> NotImplementedError:
     )
 
 
-class PostgreSQLHandler(DatabaseInterface):
+class PostgreSQLHandler(DataStore):
     """Stub Postgres backend. Populate one method at a time."""
 
     def __init__(

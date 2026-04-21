@@ -6,7 +6,7 @@ callers fail loudly instead of silently doing nothing. Once real SQL starts
 landing, the individual `test_*_raises_not_implemented` tests will flip to
 real behavioural tests one at a time.
 
-Separately, this suite proves the stub still *satisfies* `DatabaseInterface`,
+Separately, this suite proves the stub still *satisfies* `DataStore` (ABC),
 so the orchestrator can legitimately construct one.
 """
 from datetime import datetime
@@ -14,7 +14,7 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from prove_shared.database.interface import DatabaseInterface
+from prove_shared.database.interface import DataStore
 from prove_shared.database.postgres import PostgreSQLHandler
 
 
@@ -27,9 +27,9 @@ def pg() -> PostgreSQLHandler:
 # ===========================================================================
 # Structural: stub implements the interface
 # ===========================================================================
-def test_stub_is_a_database_interface(pg):
-    """Proves the ABC constraints are satisfied (no missing @abstractmethod)."""
-    assert isinstance(pg, DatabaseInterface)
+def test_stub_is_a_datastore(pg):
+    """Proves every @abstractmethod on DataStore is implemented (even if only as a stub)."""
+    assert isinstance(pg, DataStore)
 
 
 def test_stub_carries_connection_params(pg):

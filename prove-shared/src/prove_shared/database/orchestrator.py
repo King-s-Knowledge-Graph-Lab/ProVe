@@ -1,10 +1,10 @@
 # @repo: shared
-# @description: Config-driven database orchestrator. Selects primary/fallback backends from YAML and exposes the same DatabaseInterface so callers are backend-agnostic.
+# @description: Config-driven database orchestrator. Selects primary/fallback backends from YAML and exposes the same DataStore (ABC) so callers are backend-agnostic.
 """
 DatabaseOrchestrator — chooses and wraps the active backend.
 
 The orchestrator is a thin, transparent wrapper around a primary
-`DatabaseInterface` implementation, with two optional behaviours:
+`DataStore` implementation, with two optional behaviours:
 
     1. Dual-write mode  (for migration) — writes go to the primary
        *and* the fallback. Writes to the fallback are log-and-continue:
@@ -46,7 +46,7 @@ import pandas as pd
 import yaml
 
 from ..logger import logger
-from .interface import DatabaseInterface, QueueRef
+from .interface import DataStore, QueueRef
 
 
 # ---------------------------------------------------------------------------
@@ -55,15 +55,15 @@ from .interface import DatabaseInterface, QueueRef
 # `get_database()` is called once per process in most cases (module-level in
 # each caller). We cache the result so repeated calls don't reopen connections.
 # Tests can pass `config=...` explicitly to bypass the cache.
-_CACHED_DB: Optional[DatabaseInterface] = None
+_CACHED_DB: Optional[DataStore] = None
 
 
 # ---------------------------------------------------------------------------
 # Backend factory
 # ---------------------------------------------------------------------------
-def _build_backend(kind: str, settings: Dict[str, Any]) -> DatabaseInterface:
+def _build_backend(kind: str, settings: Dict[str, Any]) -> DataStore:
     """
-    Construct a concrete `DatabaseInterface` implementation.
+    Construct a concrete `DataStore` implementation.
 
     Kept here rather than in the backend modules themselves so that the
     config-shape-to-constructor-arg mapping lives in one place. Adding a new
@@ -91,11 +91,11 @@ def _build_backend(kind: str, settings: Dict[str, Any]) -> DatabaseInterface:
     raise ValueError(f"Unknown database backend: {kind!r}")
 
 
-class DatabaseOrchestrator(DatabaseInterface):
+class DatabaseOrchestrator(DataStore):
     """
     Routes reads and writes between a primary and an optional fallback.
 
-    Implements `DatabaseInterface` itself so callers hold a single object
+    Implements `DataStore` itself so callers hold a single object
     and never know which backend is serving any given call. Method bodies
     are deliberately explicit (rather than `__getattr__`-based) so IDEs,
     type checkers, and stack traces point at the right thing.
@@ -103,8 +103,8 @@ class DatabaseOrchestrator(DatabaseInterface):
 
     def __init__(
         self,
-        primary: DatabaseInterface,
-        fallback: Optional[DatabaseInterface] = None,
+        primary: DataStore,
+        fallback: Optional[DataStore] = None,
         dual_write: bool = False,
         auto_fallback_on_read: bool = False,
     ) -> None:
@@ -387,7 +387,7 @@ def get_database(
     config_path: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
     refresh: bool = False,
-) -> DatabaseInterface:
+) -> DataStore:
     """
     Return the configured database handler.
 
@@ -399,7 +399,7 @@ def get_database(
         refresh: Rebuild the cached instance even if one already exists.
 
     Returns:
-        A `DatabaseInterface` implementation. When `fallback` is None and
+        A `DataStore` implementation. When `fallback` is None and
         `mode == "single"`, the concrete backend is returned directly (no
         orchestrator wrapper) so callers pay zero extra cost. As soon as
         fallback/dual-write is configured, the orchestrator kicks in.
@@ -429,7 +429,7 @@ def get_database(
     return _CACHED_DB
 
 
-def _build_from_config(db_cfg: Dict[str, Any]) -> DatabaseInterface:
+def _build_from_config(db_cfg: Dict[str, Any]) -> DataStore:
     """Translate a `database:` config dict into a concrete backend/orchestrator."""
     primary_kind = db_cfg.get("primary", "mongo")
     fallback_kind = db_cfg.get("fallback", "none")
@@ -443,7 +443,7 @@ def _build_from_config(db_cfg: Dict[str, Any]) -> DatabaseInterface:
     if fallback_kind in (None, "none", "") and mode == "single" and not auto_fallback_on_read:
         return primary
 
-    fallback: Optional[DatabaseInterface] = None
+    fallback: Optional[DataStore] = None
     if fallback_kind not in (None, "none", ""):
         fallback_settings = db_cfg.get(fallback_kind, {}) or {}
         fallback = _build_backend(fallback_kind, fallback_settings)
