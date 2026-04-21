@@ -1,5 +1,5 @@
 from .auth import AsyncAuth
-from .mongo_handler import MongoDBHandler, requestItemProcessing
+from .database.mongo import MongoDBHandler, requestItemProcessing
 from .objects import Entailment, HtmlContent, Status
 from .queue_manager import QueueManager
 from .wikidata_utils import CachedWikidataAPI

@@ -73,7 +73,7 @@ def _build_backend(kind: str, settings: Dict[str, Any]) -> DatabaseInterface:
     if kind == "mongo":
         # Imported lazily so `PostgreSQLHandler`-only environments don't need
         # pymongo on the path (useful for future slimmed-down deployments).
-        from ..mongo_handler import MongoDBHandler
+        from .mongo import MongoDBHandler
 
         return MongoDBHandler(
             connection_string=settings.get(

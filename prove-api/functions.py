@@ -18,7 +18,7 @@ from plotly import io as pio
 import yaml
 
 from prove_shared.database import get_database
-from prove_shared.mongo_handler import requestItemProcessing as request_processing
+from prove_shared.database.mongo import requestItemProcessing as request_processing
 from prove_shared.objects import Status, HtmlContent, Entailment
 
 logger = logging.getLogger("prove_api")
@@ -26,7 +26,7 @@ logger = logging.getLogger("prove_api")
 # Resolve the active backend once per process. `get_database()` reads
 # `config.yaml` and returns either a bare MongoDBHandler, a PostgreSQLHandler,
 # or a DatabaseOrchestrator wrapping both — callers never need to know which.
-mongo_handler = get_database()
+database_handler = get_database()
 
 # Params
 def load_config(config_path: str):
@@ -115,15 +115,15 @@ def get_full_data(db_path, table_name):
 def GetItem(target_id):
     try:
         # Check status in MongoDB — delegated to handler so backend swaps cleanly later.
-        mongo_status = mongo_handler.get_latest_status_by_qid(target_id)
+        status_doc = database_handler.get_latest_status_by_qid(target_id)
 
-        if mongo_status:
-            task_id = mongo_status['task_id']
+        if status_doc:
+            task_id = status_doc['task_id']
 
             # 1. Get initial data structure from html_content collection.
             # Projection kept here (not moved into the handler default) because
             # it's specific to this view's UI shape; the handler stays generic.
-            html_contents = mongo_handler.get_html_by_task_id(
+            html_contents = database_handler.get_html_by_task_id(
                 task_id,
                 fields={
                     'object_id': 1, 'property_id': 1, 'url': 1,
@@ -155,7 +155,7 @@ def GetItem(target_id):
                     continue
                 
                 # 4. Query entailment results for this (task, reference) pair.
-                entailment_results = mongo_handler.get_entailments_by_task_and_reference(
+                entailment_results = database_handler.get_entailments_by_task_and_reference(
                     task_id=task_id,
                     reference_id=temp_ref_id,
                 )
@@ -182,13 +182,13 @@ def GetItem(target_id):
             
             # Format status document
             formatted_status = {
-                'qid': mongo_status['qid'],
-                'task_id': mongo_status['task_id'],
-                'status': mongo_status['status'],
-                'algo_version': mongo_status['algo_version'],
-                'start_time': mongo_status['requested_timestamp'].strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-                if isinstance(mongo_status['requested_timestamp'], datetime)
-                else mongo_status['requested_timestamp']
+                'qid': status_doc['qid'],
+                'task_id': status_doc['task_id'],
+                'status': status_doc['status'],
+                'algo_version': status_doc['algo_version'],
+                'start_time': status_doc['requested_timestamp'].strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                if isinstance(status_doc['requested_timestamp'], datetime)
+                else status_doc['requested_timestamp']
             }
 
             return [formatted_status] + result_items
@@ -203,7 +203,7 @@ def GetItem(target_id):
 def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[Dict[str, Any]]:
     try:
         if task_id is None:
-            status = mongo_handler.get_latest_status_by_qid(target_id)
+            status = database_handler.get_latest_status_by_qid(target_id)
 
             if not status:
                 return get_item_from_sqlite(target_id)
@@ -212,7 +212,7 @@ def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[D
             task_id = status.task_id
 
         # Fetch all HTML rows for this task (no projection — caller wants the full doc).
-        html_contents = mongo_handler.get_html_by_task_id(task_id)
+        html_contents = database_handler.get_html_by_task_id(task_id)
 
         items = []
         if html_contents:
@@ -226,7 +226,7 @@ def get_item(target_id: str, task_id: str = None, header: bool = True) -> List[D
             # Server-side aggregation: group top entailment scores per (reference, result).
             # The pipeline lives in the handler; this call site only knows the inputs
             # it needs (task_id + the references it actually cares about).
-            entailmments = mongo_handler.aggregate_entailments_by_task_id(
+            entailmments = database_handler.aggregate_entailments_by_task_id(
                 task_id=task_id,
                 reference_ids=[item.reference_id for item in iterable_items],
             )
@@ -296,9 +296,9 @@ def get_item_from_sqlite(target_id):
 def CheckItemStatus(target_id):
     try:
         # Check MongoDB status collection first — unsorted; we scan in-memory below.
-        mongo_statuses = mongo_handler.get_statuses_by_qid(target_id)
+        status_docs = database_handler.get_statuses_by_qid(target_id)
         
-        if mongo_statuses:
+        if status_docs:
             # Get the latest timestamp for each status, handling None values
             def get_latest_timestamp(status_doc):
                 timestamps = [
@@ -318,7 +318,7 @@ def CheckItemStatus(target_id):
                         valid_timestamps.append(ts)
                 return max(valid_timestamps) if valid_timestamps else datetime.min
             
-            latest_status = max(mongo_statuses, key=get_latest_timestamp)
+            latest_status = max(status_docs, key=get_latest_timestamp)
             
             return {
                 'qid': latest_status['qid'],
@@ -341,7 +341,7 @@ def CheckItemStatus(target_id):
 
 def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
     # Cached summary lookup — None means "no summary computed yet".
-    result = mongo_handler.get_summary_by_id(target_id)
+    result = database_handler.get_summary_by_id(target_id)
     summary = deepcopy(result)
 
     if result is None or update:
@@ -359,7 +359,7 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
 
         # Default projection in the handler is {'total_claims': 1, '_id': 0},
         # matching every call site in this file — no projection needed here.
-        stats = mongo_handler.get_parser_stats_by_task_and_entity(task_id, target_id)
+        stats = database_handler.get_parser_stats_by_task_and_entity(task_id, target_id)
         total_claims = (stats or {}).get('total_claims')
 
         version = item.get('algo_version', 'Not processed yet')
@@ -375,7 +375,7 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
             result['status'] = 'No available URLs'
             result['proveScore'] = 1.
             # Upsert is idempotent and race-safe, unlike the old insert/update split.
-            mongo_handler.upsert_summary_by_id(target_id, result)
+            database_handler.upsert_summary_by_id(target_id, result)
             return result
 
         refuting_count = counter[counter['result'] == 'REFUTES'].shape[0]
@@ -397,7 +397,7 @@ def get_summary(target_id: str, update: bool = False) -> dict[str, any]:
 
         # Single upsert path — the previous insert-or-update branching was
         # race-prone when two workers raced on the same missing summary.
-        mongo_handler.upsert_summary_by_id(target_id, result)
+        database_handler.upsert_summary_by_id(target_id, result)
     else:
         result.pop('_id', None)
 
@@ -426,7 +426,7 @@ def get_history(
 
         # Parser-stats lookup via the handler. The handler returns None if the
         # document doesn't exist, so guard with `or {}` before `.get`.
-        stats = mongo_handler.get_parser_stats_by_task_and_entity(
+        stats = database_handler.get_parser_stats_by_task_and_entity(
             task_id=job.task_id,
             entity_id=target_id,
         )
@@ -445,7 +445,7 @@ def get_history(
         }
 
     # All statuses for this QID, newest-first by completion time.
-    jobs = mongo_handler.get_statuses_by_qid(
+    jobs = database_handler.get_statuses_by_qid(
         target_id,
         sort_by='completed_timestamp',
         descending=True,
@@ -503,7 +503,7 @@ def comprehensive_results(target_id):
     qid = first_item['qid']
     
     # Fetch total_claims via the handler (default projection already matches).
-    parser_stats = mongo_handler.get_parser_stats_by_task_and_entity(task_id, qid)
+    parser_stats = database_handler.get_parser_stats_by_task_and_entity(task_id, qid)
     
     total_claims = parser_stats['total_claims'] if parser_stats else None
     
@@ -555,7 +555,7 @@ def comprehensive_results(target_id):
 def checkQueue():
     # Pending items on the user queue, oldest-first so the UI shows an honest
     # FIFO view of what's currently waiting.
-    in_queue = mongo_handler.get_queue_items(
+    in_queue = database_handler.get_queue_items(
         queue_name='user',
         status='in queue',
         sort_by='requested_timestamp',
@@ -622,7 +622,7 @@ def requestItemProcessing(qid: str):
     return request_processing(
         qid=qid,
         queue='user',
-        db=mongo_handler,
+        db=database_handler,
         algo_version=algo_version,
         request_type='userRequested',
     )

@@ -73,7 +73,30 @@ pip install -e .
 
 ```python
 from prove_shared import MongoDBHandler, AsyncAuth, Status
-from prove_shared.mongo_handler import requestItemProcessing
+from prove_shared.database.mongo import requestItemProcessing
+```
+
+### Package layout
+
+```text
+prove-shared/
+  pyproject.toml
+  config.yaml
+  src/
+    prove_shared/
+      __init__.py
+      auth.py
+      file_utils.py
+      logger.py
+      objects.py
+      queue_manager.py
+      wikidata_utils.py
+      database/
+        __init__.py
+        interface.py     # DatabaseInterface ABC (the contract)
+        mongo.py         # MongoDBHandler implementation
+        postgres.py      # PostgreSQLHandler stub
+        orchestrator.py  # get_database() + DatabaseOrchestrator
 ```
 
 ## Setup Instructions

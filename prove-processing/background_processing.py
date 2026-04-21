@@ -9,7 +9,7 @@ import requests
 import yaml
 
 from prove_shared.database import get_database
-from prove_shared.mongo_handler import requestItemProcessing
+from prove_shared.database.mongo import requestItemProcessing
 
 logger = logging.getLogger("prove_processing")
 
@@ -24,7 +24,7 @@ config = load_config('config.yaml')
 algo_version = config['version']['algo_version']
 # Backend selected by config.yaml. Mongo today; Postgres (or a dual-write
 # orchestrator) when the migration flips the `database.primary` key.
-mongo_handler = get_database()
+database_handler = get_database()
 
 
 def fetch_qid_by_label(label):
@@ -135,7 +135,7 @@ def process_top_viewed_items(project="en.wikipedia", access="all-access", limit=
                 result = requestItemProcessing(
                     qid=qid,
                     queue='random',
-                    db=mongo_handler,
+                    db=database_handler,
                     request_type='top_viewed',
                     algo_version=algo_version,
                 )
@@ -159,7 +159,7 @@ def process_pagepile_list(file_path='utils/pagepileList.txt'):
                 result = requestItemProcessing(
                     qid=qid,
                     queue='random',
-                    db=mongo_handler,
+                    db=database_handler,
                     request_type='pagepile_weekly_update',
                     algo_version=algo_version,
                 )
@@ -189,7 +189,7 @@ def process_system_qid(qid: str) -> None:
     result = requestItemProcessing(
         qid=qid,
         queue='random',
-        db=mongo_handler,
+        db=database_handler,
         request_type='Random_processing',
         algo_version=algo_version,
     )
