@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
-from .local_secrets import API_KEY, PRIVATE_KEY
+from .secrets import API_KEY, PRIVATE_KEY
 
 
 class AsyncAuth:

@@ -197,9 +197,17 @@ def create_geo_choropleth(df_geo):
     return fig
 
 
-def create_top_countries_chart(df_geo, top_n=10):
+def _is_valid_location_label(value):
+    """Return True when a location label is present and meaningful."""
+    if pd.isna(value):
+        return False
+    value_str = str(value).strip()
+    return value_str not in {'', 'Not found', 'None', 'null', 'nan'}
+
+
+def create_top_countries_chart(df_geo, top_n=20):
     """Create top countries bar chart"""
-    df_top = df_geo.head(top_n)
+    df_top = df_geo[df_geo['country_code'].apply(_is_valid_location_label)].head(top_n)
 
     fig = go.Figure()
 
@@ -216,18 +224,18 @@ def create_top_countries_chart(df_geo, top_n=10):
         xaxis_title='Number of Requests',
         yaxis_title='Country Code',
         template='plotly_white',
-        height=400,
+        height=650,
         yaxis={'categoryorder': 'total ascending'}
     )
 
     return fig
 
 
-def create_top_cities_chart(data, top_n=10):
+def create_top_cities_chart(data, top_n=20):
     """Create top cities bar chart"""
     cities = data.get('city', {})
     city_data = [{'city': city, 'count': count} for city, count in cities.items()
-                 if city != 'Not found' and city != '']
+                 if _is_valid_location_label(city)]
     df_cities = pd.DataFrame(city_data).sort_values('count', ascending=False).head(top_n)
 
     fig = go.Figure()
@@ -245,7 +253,7 @@ def create_top_cities_chart(data, top_n=10):
         xaxis_title='Number of Requests',
         yaxis_title='City',
         template='plotly_white',
-        height=400,
+        height=650,
         yaxis={'categoryorder': 'total ascending'}
     )
 
@@ -276,19 +284,41 @@ def create_execution_time_boxplot(df_requests):
 
 
 def create_request_distribution_pie(df_requests):
-    """Create request distribution pie chart"""
-    fig = go.Figure()
+    """Create readable request distribution pie chart with conditional labels."""
+    df_dist = df_requests[['endpoint', 'count']].copy()
+    df_dist = df_dist.sort_values('count', ascending=False)
 
+    total_count = df_dist['count'].sum()
+    df_dist['raw_percentage'] = (df_dist['count'] / total_count * 100)
+    df_dist = df_dist[df_dist['raw_percentage'] >= 0.05].copy()
+    df_dist['percentage'] = df_dist['raw_percentage'].round(1)
+    df_dist = df_dist.drop(columns=['raw_percentage'])
+    text_labels = [
+        f"{pct:.1f}%" if pct >= 1.0 else ''
+        for pct in df_dist['percentage']
+    ]
+
+    fig = go.Figure()
     fig.add_trace(go.Pie(
-        labels=df_requests['endpoint'],
-        values=df_requests['count'],
-        hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent}<extra></extra>'
+        labels=df_dist['endpoint'],
+        values=df_dist['count'],
+        customdata=df_dist['percentage'],
+        text=text_labels,
+        texttemplate='%{text}',
+        textposition='outside',
+        textfont=dict(size=14),
+        hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{customdata:.1f}%<extra></extra>',
+        sort=False,
+        marker=dict(line=dict(color='white', width=2))
     ))
 
     fig.update_layout(
         title='Request Distribution by Endpoint',
         template='plotly_white',
-        height=400
+        height=560,
+        uniformtext_minsize=12,
+        uniformtext_mode='hide',
+        legend=dict(title='Endpoint')
     )
 
     return fig
@@ -389,10 +419,10 @@ def build_overview_tab(data, kpis, df_monthly, df_requests):
             dbc.Row([
                 dbc.Col([
                     dcc.Graph(figure=create_request_performance_chart(df_requests))
-                ], md=7),
+                ], md=6),
                 dbc.Col([
                     dcc.Graph(figure=create_request_distribution_pie(df_requests))
-                ], md=5),
+                ], md=6),
             ], className='mb-4'),
         ], fluid=True)
     ])
@@ -402,21 +432,18 @@ def build_geography_tab(df_geo, data):
     """Build Geographic Analysis tab content"""
     return dbc.Tab(label='Geographic Analysis', tab_id='geography', children=[
         dbc.Container([
-            # Choropleth Map
+            # Top Countries
             dbc.Row([
                 dbc.Col([
-                    dcc.Graph(figure=create_geo_choropleth(df_geo))
+                    dcc.Graph(figure=create_top_countries_chart(df_geo, top_n=20))
                 ], md=12)
             ], className='mb-4'),
 
-            # Top Countries and Cities
+            # Top Cities
             dbc.Row([
                 dbc.Col([
-                    dcc.Graph(figure=create_top_countries_chart(df_geo, top_n=10))
-                ], md=6),
-                dbc.Col([
-                    dcc.Graph(figure=create_top_cities_chart(data, top_n=10))
-                ], md=6),
+                    dcc.Graph(figure=create_top_cities_chart(data, top_n=20))
+                ], md=12),
             ], className='mb-4'),
         ], fluid=True)
     ])
@@ -531,12 +558,15 @@ def create_dashboard():
     return app
 
 
+app = create_dashboard()
+server = app.server
+
+
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
 if __name__ == '__main__':
-    app = create_dashboard()
     print("\n" + "="*60)
     print("Dashboard is running!")
     print("Open your browser and navigate to: http://127.0.0.1:8050")

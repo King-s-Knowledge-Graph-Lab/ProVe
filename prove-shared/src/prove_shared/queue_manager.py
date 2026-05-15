@@ -4,7 +4,7 @@ import requests
 import uuid
 import hashlib
 
-from .local_secrets import ENDPOINT, API_KEY
+from .secrets import ENDPOINT, API_KEY
 from .auth import AsyncAuth
 
 class QueueManager:

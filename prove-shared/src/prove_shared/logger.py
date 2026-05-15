@@ -4,7 +4,7 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
 
-from .local_secrets import LOG_FILENAME, LOG_PATH
+from .secrets import LOG_FILENAME, LOG_PATH
 
 
 if not os.path.exists(LOG_PATH):
