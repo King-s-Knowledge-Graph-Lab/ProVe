@@ -13,12 +13,15 @@ except ImportError:
     from api.local_secrets import MAX_CONNECTIONS
     from api.utils_api import logger
 
-from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.database import get_database
 
 
 class QueueManager:
     def __init__(self, queue: str):
-        self.mongodb = MongoDBHandler()
+        # Backend selected by config.yaml. Attribute access below (e.g.
+        # `.user_collection`) still assumes Mongo; it's the Phase 3 cleanup
+        # target once all queue references use names instead of Collection objects.
+        self.mongodb = get_database()
         self.queue: collection = getattr(self.mongodb, queue, None)
         if self.queue is None:
             logger.error(f"MongoDB has no queue with name {queue}")

@@ -21,7 +21,7 @@ from background_processing import (
     process_pagepile_list,
 )
 import ProVe_main_process
-from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.database import get_database
 from prove_shared.local_secrets import ENDPOINT, API_KEY
 from prove_shared.auth import AsyncAuth
 
@@ -51,7 +51,7 @@ class ProVeService:
         config (Dict[str, Any]): Configuration settings loaded from the YAML file.
         running (bool): A flag indicating whether the service is running.
         task_lock (Lock): A threading lock to ensure thread-safe operations.
-        mongo_handler (MongoDBHandler): An instance of MongoDBHandler for database operations.
+        database_handler (MongoDBHandler): An instance of MongoDBHandler for database operations.
         models (List[Module]): A list of initialized models for processing tasks.
         priority_queue (collection): The priority queue collection in MongoDB.
         secondary_queue (List[collection]): A list of secondary queue collections in MongoDB.
@@ -158,12 +158,16 @@ class ProVeService:
         for attempt in range(max_retries):
             try:
                 logger.info("Attempting to initialize resources...")
-                self.mongo_handler = MongoDBHandler()
-                logger.info("WikiDataMongoDB connection successful")
+                # Backend chosen by config.yaml (Mongo today, Postgres later).
+                self.database_handler = get_database()
+                logger.info("Database connection successful")
 
                 logger.info("Initializing queues...")
-                # Initialize priority queue
-                priority_queue = getattr(self.mongo_handler, self.priority_queue, None)
+                # TODO (Phase 3): this still expects a pymongo Collection via
+                # attribute access (e.g. `.user_collection`). Once every
+                # consumer uses queue *names* instead of Collection objects,
+                # this `getattr` dance can be replaced with `queue_name` strings.
+                priority_queue = getattr(self.database_handler, self.priority_queue, None)
                 if priority_queue is None:
                     exception = f"Priority queue '{self.priority_queue}'"
                     exception += " not found in MongoDBHandler"
@@ -172,7 +176,7 @@ class ProVeService:
 
                 # Initialize secondary queues
                 secondary_queue = [
-                    getattr(self.mongo_handler, queue) for queue in self.secondary_queue
+                    getattr(self.database_handler, queue) for queue in self.secondary_queue
                 ]
                 if len(secondary_queue) != len(self.secondary_queue):
                     exception = "One or more secondary queues not found in MongoDBHandler: "
@@ -205,8 +209,8 @@ class ProVeService:
         """
         with self.task_lock:
             try:
-                self.mongo_handler.ensure_connection()
-                self.mongo_handler.save_status(status_dict)
+                self.database_handler.ensure_connection()
+                self.database_handler.save_status(status_dict)
                 logger.info("Saved new status_dict into status")
 
                 qid = status_dict['qid']
@@ -220,15 +224,15 @@ class ProVeService:
                 entailment_results['task_id'] = task_id
                 parser_stats['task_id'] = task_id
 
-                self.mongo_handler.save_html_content(html_df)
-                self.mongo_handler.save_entailment_results(entailment_results)
-                self.mongo_handler.save_parser_stats(parser_stats)
+                self.database_handler.save_html_content(html_df)
+                self.database_handler.save_entailment_results(entailment_results)
+                self.database_handler.save_parser_stats(parser_stats)
 
                 status_dict['status'] = 'completed'
                 status_dict['completed_timestamp'] = datetime.utcnow().strftime(
                     '%Y-%m-%dT%H:%M:%S.%f'
                 )
-                self.mongo_handler.save_status(status_dict)
+                self.database_handler.save_status(status_dict)
                 logger.info("Updated new status_dict into status")
                 try:
                     # TODO: This imports from prove-api (user service side).
@@ -244,40 +248,36 @@ class ProVeService:
                 logger.error(f"Error processing task {task_id}: {e}")
                 status_dict['status'] = 'error'
                 status_dict['error_message'] = str(e)
-                self.mongo_handler.save_status(status_dict)
+                self.database_handler.save_status(status_dict)
 
     def retry_processing(self, queue: collection) -> None:
         """
-        Retry processing items in the queue that are stuck in 'processing' state.
+        Retry items in `queue` that are stuck in 'processing'.
+
+        Reads and writes both route through the shared handler now, so this
+        method is identical for Mongo and (future) Postgres. The retry limit
+        is intentionally hard-coded here — it's a service-policy constant,
+        not a DB concern.
 
         Args:
-            queue (collection): The MongoDB collection representing the queue to check.
+            queue: The queue to sweep. May be a pymongo Collection (legacy
+                `self.priority_queue` / `self.secondary_queue` entries) — the
+                handler's `_resolve_queue` accepts both.
         """
         retry_limit = 3
 
-        # Find items that are in processing state
-        stuck_items = queue.find({
-            'status': 'processing'
-        })
+        # Items currently stuck in 'processing' — candidates to retry or fail.
+        stuck_items = self.database_handler.get_queue_items(queue, status='processing')
 
         for item in stuck_items:
-            # Check the number of retries
             if item.get('retry_count', 0) < retry_limit:
                 logger.info(f"Retrying QID {item['qid']}...")
-                # Increment the retry count
-                queue.update_one(
-                    {'_id': item['_id']},
-                    {'$set': {'retry_count': item.get('retry_count', 0) + 1}}
-                )
-                # Reprocess the item
+                # Atomic `$inc` inside the handler — no lost-update race.
+                self.database_handler.increment_retry_by_id(queue, item['_id'])
                 self.main_loop(item)
             else:
                 logger.error(f"QID {item['qid']} has reached the maximum retry limit.")
-                # Update the status to error if retry limit is reached
-                queue.update_one(
-                    {'_id': item['_id']},
-                    {'$set': {'status': 'error', 'error_message': 'Max retry limit reached'}}
-                )
+                self.database_handler.mark_queue_item_error_by_id(queue, item['_id'])
 
     def run(self):
         """
@@ -301,13 +301,13 @@ class ProVeService:
 
             while self.running:
                 try:
-                    self.mongo_handler.ensure_connection()
+                    self.database_handler.ensure_connection()
                     _id = self.get_next_request(self.priority_queue.name)
                     logger.info(f"Next request {_id}")
 
                     status_dict = {}
                     if _id:
-                        status_dict = self.mongo_handler.get_request_by_id(self.priority_queue, _id)
+                        status_dict = self.database_handler.get_request_by_id(self.priority_queue, _id)
 
                     if status_dict:
                         logger.info(f"Processing request for QID: {status_dict['qid']}")
@@ -319,7 +319,7 @@ class ProVeService:
                             _id = self.get_next_request(queue.name)
                             status_dict = {}
                             if _id:
-                                status_dict = self.mongo_handler.get_request_by_id(queue, _id)
+                                status_dict = self.database_handler.get_request_by_id(queue, _id)
                             logger.info(f"{_id}: {status_dict}")
 
                             if status_dict:
@@ -340,10 +340,19 @@ class ProVeService:
             sys.exit(1)
 
     def update_request(self, queue, status_dict, status):
+        """
+        Flip the `status` field on the (task_id, qid) row in `queue`.
+
+        Called from the main loop to mark a job 'completed' once processing
+        finishes. The handler does the write so this method stays backend-
+        agnostic.
+        """
         logger.info(f"Updating {status_dict['qid']} for {queue.name}")
-        queue.update_one(
-            {'task_id': status_dict['task_id'], 'qid': status_dict['qid']},
-            {'$set': {'status': status}}
+        self.database_handler.update_queue_status_by_task_and_qid(
+            queue_name=queue,
+            task_id=status_dict['task_id'],
+            qid=status_dict['qid'],
+            status=status,
         )
         logger.info(f"Updated {status_dict['qid']} original request with {status}")
 

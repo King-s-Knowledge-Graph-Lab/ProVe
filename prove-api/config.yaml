@@ -38,3 +38,30 @@ evidence_selection:
   n_top_sentences: 5
   score_threshold: 0
   token_size: 512
+
+# ----------------------------------------------------------------------------
+# Database backend selection (read by prove_shared.database.get_database)
+# ----------------------------------------------------------------------------
+# primary:  "mongo" | "postgres"          — the DB that owns the data
+# fallback: "none"  | "mongo" | "postgres" — secondary backend (optional)
+# mode:     "single" | "dual-write"       — "dual-write" mirrors every write
+#                                           to the fallback during migration
+# auto_fallback_on_read:                   if true, failed reads on primary
+#                                           retry against the fallback (off
+#                                           by default — silent fallbacks
+#                                           hide real outages)
+# ----------------------------------------------------------------------------
+database:
+  primary: mongo
+  fallback: none
+  mode: single
+  auto_fallback_on_read: false
+
+  mongo:
+    connection_string: "mongodb://localhost:27017/"
+    max_retries: 3
+
+  # TODO: populate when the Postgres migration begins.
+  postgres:
+    dsn: "postgresql://localhost/prove"
+    max_retries: 3
