@@ -8,7 +8,8 @@ import pandas as pd
 import requests
 import yaml
 
-from prove_shared.mongo_handler import MongoDBHandler, requestItemProcessing
+from prove_shared.database import get_database
+from prove_shared.database.mongo import requestItemProcessing
 
 logger = logging.getLogger("prove_processing")
 
@@ -21,7 +22,9 @@ def load_config(config_path: str):
 
 config = load_config('config.yaml')
 algo_version = config['version']['algo_version']
-mongo_handler = MongoDBHandler()
+# Backend selected by config.yaml. Mongo today; Postgres (or a dual-write
+# orchestrator) when the migration flips the `database.primary` key.
+database_handler = get_database()
 
 
 def fetch_qid_by_label(label):
@@ -124,27 +127,42 @@ def process_top_viewed_items(project="en.wikipedia", access="all-access", limit=
         for idx, (title, views, qid) in enumerate(top_items, 1):
             logger.info(f"{idx}. Title: {title} - {views} views (QID: {qid})")
             
-            # Queue each item for processing
-            if qid:  # Only queue if QID is found
-                result = requestItemProcessing(qid, 'top_viewed')
+            # Queue each item for processing on the random queue.
+            # Previously the second positional arg was `'top_viewed'` which
+            # silently slotted into the wrong parameter — fixed here by
+            # using keyword args and the semantic queue name.
+            if qid:
+                result = requestItemProcessing(
+                    qid=qid,
+                    queue='random',
+                    db=database_handler,
+                    request_type='top_viewed',
+                    algo_version=algo_version,
+                )
                 logger.info(f"   Queue status: {result}")
     else:
         logger.info("No articles found.")
 
 def process_pagepile_list(file_path='utils/pagepileList.txt'):
     """
-    Process the QIDs from the pagepile list file and queue them for processing.
-    
+    Read QIDs from `file_path` and enqueue each on the random queue.
+
     Args:
         file_path: The path to the pagepile list file.
     """
     try:
         with open(file_path, 'r') as file:
             qids = file.read().splitlines()
-        
+
         for qid in qids:
-            if qid:  # Ensure the QID is not empty
-                result = requestItemProcessing(qid, 'pagepile_weekly_update')
+            if qid:
+                result = requestItemProcessing(
+                    qid=qid,
+                    queue='random',
+                    db=database_handler,
+                    request_type='pagepile_weekly_update',
+                    algo_version=algo_version,
+                )
                 logger.info(f"Queued QID {qid} for processing: {result}")
     except Exception as e:
         logger.error(f"Error processing pagepile list: {e}")
@@ -152,28 +170,28 @@ def process_pagepile_list(file_path='utils/pagepileList.txt'):
 
 def process_system_qid(qid: str) -> None:
     """
-    Queue system QID for processing.
+    Queue a system-generated QID on the random queue.
 
-    Args:
-        qid: The QID to process.
+    The old implementation passed `save_function=random_collection.insert_one`
+    as a raw pymongo callback — the last leaked collection method in the
+    codebase. It's gone: the handler now owns the insert.
 
     Raises:
         ValueError: If the QID does not start with 'Q'.
     """
     if not qid.startswith('Q'):
         try:
-            int(qid)  # Check if the random QID is a valid integer
+            int(qid)  # Confirm it's a valid integer we can prefix with 'Q'.
             qid = f"Q{qid}"
         except ValueError as e:
             raise ValueError("Generated QID does not start with 'Q'.") from e
-    
-    # Queue the random QID for processing
+
     result = requestItemProcessing(
         qid=qid,
-        algo_version=algo_version,
+        queue='random',
+        db=database_handler,
         request_type='Random_processing',
-        queue=mongo_handler.random_collection,
-        save_function=mongo_handler.random_collection.insert_one
+        algo_version=algo_version,
     )
     logger.info(f"Queued random QID {qid} for processing: {result}")
 

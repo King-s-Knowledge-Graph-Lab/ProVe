@@ -1,14 +1,12 @@
 # @repo: api
-# @description: Flask decorators for request logging (@log_request) and API key authentication (@api_required); includes StatsDBHandler for usage tracking
+# @description: Flask decorators for request logging (@log_request) and API key authentication (@api_required). Usage-logging now routes through MongoDBHandler.log_usage() — no more ad-hoc StatsDBHandler subclass.
 from datetime import datetime, timezone
-from base64 import b64encode, b64decode
+from base64 import b64decode
 from functools import wraps
 from flask import request
 import threading
 import time
 from typing import Any, Union
-
-from pymongo import MongoClient
 
 try:
     from utils_api import get_ip_location, logger
@@ -17,46 +15,30 @@ except ImportError:
     from api.utils_api import get_ip_location, logger
     from api.local_secrets import SOURCE, API_KEY, PRIVATE_KEY
 
-from prove_shared.mongo_handler import MongoDBHandler
+from prove_shared.database import get_database
 from prove_shared.auth import AsyncAuth
 
 
-class StatsDBHandler(MongoDBHandler):
-    def __init__(self, connection_string="mongodb://localhost:27017/", max_retries=3):
-        super().__init__(connection_string, max_retries)
-
-    def connect(self, max_retries: int, connection_string: str):
-        for attempt in range(self.max_retries):
-            try:
-                self.client = MongoClient(self.connection_string)
-                self.client.server_info()
-                self.db = self.client['service_usage']
-                self.usage_collection = self.db['usage']
-                print("Successfully connected to StatsDB")
-                return True
-            except Exception as e:
-                print(f"StatsDB connection attempt {attempt + 1} failed: {e}")
-                if attempt == self.max_retries - 1:
-                    raise ConnectionError("Failed to connect to StatsDB") from e
-                time.sleep(5)  # Wait before retry
-
-    def close(self):
-        """Closes the MongoDB connection."""
-        if self.client:
-            self.client.close()
-            print("MongoDB connection closed")
-
-    def __enter__(self):
-        """Enables use with 'with' statement."""
-        self.connect()
-        return self  # Allows access to the instance in 'with' block
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Ensures the connection is closed when exiting 'with' block."""
-        self.close()
+# ---------------------------------------------------------------------------
+# Shared database handle
+# ---------------------------------------------------------------------------
+# One backend instance per process is enough. `get_database()` reads the
+# app's config.yaml and returns whichever implementation is configured
+# (Mongo today, Postgres later, or an orchestrator that writes to both
+# during migration). The per-request `with StatsDBHandler()` pattern used
+# previously paid a connect cost on every HTTP hit — this avoids that.
+_db = get_database()
 
 
 def log_request(func):
+    """
+    Fire-and-forget usage logger for any API route.
+
+    Writes the request metadata to the production usage DB on a background
+    thread so the actual response latency is unaffected. Logging failures are
+    swallowed inside the handler — a usage-log hiccup must never surface to
+    the caller as a 500.
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         method = request.method
@@ -77,11 +59,12 @@ def log_request(func):
         end_time = time.monotonic()
         elapsed_time = end_time - start_time
 
+        # Only log in the production environment (SOURCE is set per-deploy).
         if SOURCE != 'server':
             return response
 
         threading.Thread(
-            target=log_usage_information,
+            target=_log_usage_information,
             args=(timestamp, method, url, headers, body, elapsed_time),
             daemon=True
         ).start()
@@ -90,43 +73,46 @@ def log_request(func):
     return wrapper
 
 
-def log_usage_information(
+def _log_usage_information(
     timestamp: str,
     method: str,
     url: str,
     headers: dict[str, Any],
     body: dict[str, Any],
-    elapsed_time: float
+    elapsed_time: float,
 ) -> None:
-    try:
-        with StatsDBHandler() as db:
-            ip = headers.pop("X-Real-Ip", None)
-            headers.pop("X-Forwarded-For", None)
+    """
+    Build a usage record and hand it to the database handler.
 
-            if ip:
-                try:
-                    headers["location"] = get_ip_location(ip)
-                except KeyError:
-                    headers["X-Real-Ip"] = ip
-                    logger.error(f"when retrieving location for {ip}")
-                except ConnectionError:
-                    headers["X-Real-Ip"] = ip
-                    logger.error("failed to retrieve location, check API")
+    The IP-geolocation enrichment can raise (KeyError on unknown IPs,
+    ConnectionError if the geo API is down). We handle those here so the
+    record is still written without location data rather than being dropped.
+    """
+    ip = headers.pop("X-Real-Ip", None)
+    headers.pop("X-Forwarded-For", None)
 
-            db.usage_collection.insert_one({
-                "method": method,
-                "url": url,
-                "headers": headers,
-                "body": body,
-                "timestamp": timestamp,
-                "execution_time": elapsed_time
-            })
-    except ConnectionError as e:
-        print(f"Failed to log usage information from StatsDB: {e}")
-        return
+    if ip:
+        try:
+            headers["location"] = get_ip_location(ip)
+        except KeyError:
+            headers["X-Real-Ip"] = ip
+            logger.error(f"when retrieving location for {ip}")
+        except ConnectionError:
+            headers["X-Real-Ip"] = ip
+            logger.error("failed to retrieve location, check API")
+
+    _db.log_usage({
+        "method": method,
+        "url": url,
+        "headers": headers,
+        "body": body,
+        "timestamp": timestamp,
+        "execution_time": elapsed_time,
+    })
 
 
 def api_required(func):
+    """Reject requests that don't carry a valid AsyncAuth-signed API key."""
     @wraps(func)
     def decorator(*args, **kwargs):
         if not request.json:
@@ -136,7 +122,5 @@ def api_required(func):
         api_key = b64decode(api_key)
         if api_key is None or not AsyncAuth.is_valid(api_key):
             return {"message": "Please provide a valid API key."}, 403
-        else:
-            return func(*args, **kwargs)
+        return func(*args, **kwargs)
     return decorator
-

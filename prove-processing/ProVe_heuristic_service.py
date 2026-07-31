@@ -30,7 +30,7 @@ class HeuristicBasedService(ProVeService):
         heuristic (callable): The heuristic function to use for selecting QIDs.
         running (bool): A flag indicating whether the service is running.
         task_lock (Lock): A threading lock to ensure thread-safe operations.
-        mongo_handler (MongoDBHandler): An instance of MongoDBHandler for database operations.
+        database_handler (MongoDBHandler): An instance of MongoDBHandler for database operations.
         priority_queue (collection): The priority queue collection in MongoDB.
         secondary_queue (List[collection]): A list of secondary queue collections in MongoDB.
     """
@@ -92,21 +92,17 @@ class HeuristicBasedService(ProVeService):
 
     def verify_qid(self, qid: str) -> bool:
         """
-        Verify if the QID is valid.
+        Return True iff `qid` isn't already present in any known queue.
 
-        Args:
-            qid (str): The QID to verify.
-
-        Returns:
-            bool: True if the QID is valid and does not already exist in any of the secondary
-            queues, and priority queue. False otherwise.
+        Every existence check now routes through the handler, so the same
+        method works unchanged against Mongo today and Postgres tomorrow.
         """
-        if self.priority_queue.find_one({'qid': qid}):
+        if self.database_handler.find_queue_item_by_qid(self.priority_queue, qid):
             logger.warning(f"{qid} already exists in priority queue {self.priority_queue.name}.")
             return False
 
         for queue in self.secondary_queue:
-            if queue.find_one({'qid': qid}):
+            if self.database_handler.find_queue_item_by_qid(queue, qid):
                 logger.warning(f"QID {qid} already exists in secondary queue {queue.name}.")
                 return False
         return True
