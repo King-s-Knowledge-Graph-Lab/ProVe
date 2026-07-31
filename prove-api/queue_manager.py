@@ -7,10 +7,10 @@ from typing import Any, Dict, Union
 from pymongo import collection
 
 try:
-    from local_secrets import MAX_CONNECTIONS
+    from settings import MAX_CONNECTIONS
     from utils_api import logger
 except ImportError:
-    from api.local_secrets import MAX_CONNECTIONS
+    from api.settings import MAX_CONNECTIONS
     from api.utils_api import logger
 
 from prove_shared.database import get_database

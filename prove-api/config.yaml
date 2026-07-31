@@ -1,10 +1,6 @@
 # TODO: This is a duplicate of the root config.yaml for the prove-api package.
 # Once the split is finalised, each package should only contain the settings it needs.
 
-database:
-  name: 'wikidata_claims_refs_parsed.db'
-  result_db_for_API: '/home/ubuntu/mntdisk/reference_checked.db'
-
 queue:
   heuristic: 'random'
 
@@ -52,13 +48,16 @@ evidence_selection:
 #                                           hide real outages)
 # ----------------------------------------------------------------------------
 database:
+  name: 'wikidata_claims_refs_parsed.db'
+  result_db_for_API: '/data/reference_checked.db'
+
   primary: mongo
   fallback: none
   mode: single
   auto_fallback_on_read: false
 
   mongo:
-    connection_string: "mongodb://localhost:27017/"
+    connection_string: "mongodb://host.docker.internal:27017/"
     max_retries: 3
 
   # TODO: populate when the Postgres migration begins.

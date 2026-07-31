@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+#
+# Build context must be the repo root (prove-processing depends on the sibling
+# `prove-shared` package via a path source in pyproject.toml). Build with:
+#
+#   docker build -f prove-processing/Dockerfile.main_service -t prove-processing-main .
+#
+FROM python:3.10.16-slim-bookworm AS base
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+# Copy both packages, preserving their relative layout so the "../prove-shared"
+# path source resolves the same way it does outside Docker.
+COPY prove-shared/ /app/prove-shared/
+COPY prove-processing/ /app/prove-processing/
+
+WORKDIR /app/prove-processing
+
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/prove-processing/.venv/bin:${PATH}"
+
+# Model weights (utils/textual_entailment_module.py, sentence_retrieval_module.py,
+# verbalisation_module.py) are hardcoded to /home/ubuntu/RQV/base/... and are too
+# large to bake into the image. Bind-mount your local model folder to that exact
+# path at `docker run` time, e.g.:
+#   -v "C:\path\to\models:/home/ubuntu/RQV/base"
+
+CMD ["python", "ProVe_main_service.py"]

@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+#
+# Build context must be the repo root (prove-processing depends on the sibling
+# `prove-shared` package via a path source in pyproject.toml). Build with:
+#
+#   docker build -f prove-processing/Dockerfile.heuristic_service -t prove-processing-heuristic .
+#
+FROM python:3.10.16-slim-bookworm AS base
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+# Copy both packages, preserving their relative layout so the "../prove-shared"
+# path source resolves the same way it does outside Docker.
+COPY prove-shared/ /app/prove-shared/
+COPY prove-processing/ /app/prove-processing/
+
+WORKDIR /app/prove-processing
+
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/prove-processing/.venv/bin:${PATH}"
+
+# HeuristicBasedService.initialize_resources() runs with model=False, so unlike
+# ProVe_main_service it never loads the /home/ubuntu/RQV/base/... model weights
+# — no volume mount needed for this one.
+
+CMD ["python", "ProVe_heuristic_service.py"]

@@ -5,9 +5,9 @@ from logging.handlers import TimedRotatingFileHandler
 import os
 
 try:
-    from local_secrets import API_KEY, LOG_PATH, LOG_FILENAME
+    from settings import GEO_API_KEY, LOG_PATH, LOG_FILENAME
 except ImportError:
-    from api.local_secrets import API_KEY, LOG_PATH, LOG_FILENAME
+    from api.settings import GEO_API_KEY, LOG_PATH, LOG_FILENAME
 
 
 if not os.path.exists(LOG_PATH):
@@ -31,7 +31,7 @@ if not logger.handlers:
 def get_ip_location(ip: str) -> None:
     from urllib.request import urlopen
     import json
-    url = f'https://geolocation-db.com/json/{API_KEY}/' + ip
+    url = f'https://geolocation-db.com/json/{GEO_API_KEY}/' + ip
     res = urlopen(url)
 
     if res is None:

@@ -10,10 +10,10 @@ from typing import Any, Union
 
 try:
     from utils_api import get_ip_location, logger
-    from local_secrets import SOURCE, API_KEY, PRIVATE_KEY
+    from settings import SOURCE
 except ImportError:
     from api.utils_api import get_ip_location, logger
-    from api.local_secrets import SOURCE, API_KEY, PRIVATE_KEY
+    from api.settings import SOURCE
 
 from prove_shared.database import get_database
 from prove_shared.auth import AsyncAuth

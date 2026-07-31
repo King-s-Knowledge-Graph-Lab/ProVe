@@ -22,7 +22,7 @@ from background_processing import (
 )
 import ProVe_main_process
 from prove_shared.database import get_database
-from prove_shared.local_secrets import ENDPOINT, API_KEY
+from prove_shared.secrets import ENDPOINT, API_KEY
 from prove_shared.auth import AsyncAuth
 
 # TODO: Approach for logging to be decided — not using prove_shared logger for now,
