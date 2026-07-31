@@ -1,0 +1,40 @@
+# TODO: This is a duplicate of the root config.yaml for the prove-processing package.
+# Once the split is finalised, each package should only contain the settings it needs.
+
+database:
+  name: 'wikidata_claims_refs_parsed.db'
+  result_db_for_API: '/home/ubuntu/mntdisk/reference_checked.db'
+
+queue:
+  heuristic: 'random'
+
+version:
+  algo_version: '1.1.1'
+
+parsing:
+  reset_database: True  # This is a developer mode to clean-up DB to test soemthing
+
+spacy:
+  model: 'en_core_web_sm'
+
+html_fetching:
+  batch_size: 10
+  delay: 1.0
+  fetching_driver: 'chrome'  # available options: 'chrome' or 'requests'
+  timeout: 15
+
+logging:
+  level: 'INFO'
+  format: '%(asctime)s - %(levelname)s - %(message)s'
+
+text_processing:
+  sentence_slide:
+    enabled: true
+    window_size: 2  # sliding window for masking sentences
+    join_char: ' '
+
+evidence_selection:
+  batch_size: 256
+  n_top_sentences: 5
+  score_threshold: 0
+  token_size: 512

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prove-api"
+version = "1.0.0"
+description = "ProVe User Service — Flask API, dashboard, and queue management"
+requires-python = ">=3.10"
+
+dependencies = [
+    "prove_shared",
+    "flask",
+    "flask-cors",
+    "flasgger",
+    "flask-sqlalchemy",
+    "dash[cloud]",
+    "dash-bootstrap-components",
+    "plotly",
+    "schedule",
+    "pandas",
+]
+
+[tool.setuptools]
+packages = []
+
+[tool.uv.sources]
+prove_shared = { path = "../prove-shared" }

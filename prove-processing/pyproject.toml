@@ -1,0 +1,21 @@
+[project]
+name = "prove-processing"
+version = "1.0.0"
+description = "ProVe Inference Service — NLP pipeline for claim verification"
+requires-python = ">=3.10"
+
+dependencies = [
+    "prove-shared",
+    "torch",
+    "transformers==4.46.3",
+    "pytorch_lightning==2.4.0",
+    "qwikidata",
+    "nltk",
+    "bs4",
+    "selenium",
+    "html2text",
+    "rouge_score",
+    "sacrebleu",
+    "sparqlwrapper",
+    "schedule",
+]
