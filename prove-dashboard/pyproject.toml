@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prove-api"
+version = "1.0.0"
+description = "ProVe User Service — Flask API, dashboard, and queue management"
+requires-python = ">=3.10"
+
+dependencies = [
+    "flask",
+    "flask-cors",
+    "flasgger",
+    "flask-sqlalchemy",
+    "dash[cloud]",
+    "dash-bootstrap-components",
+    "plotly",
+    "schedule",
+    "pandas",
+    "gunicorn>=26.0.0",
+]
+
+[tool.setuptools]
+packages = []
