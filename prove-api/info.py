@@ -1,5 +1,5 @@
 # @repo: api
-# @description: Offline script that aggregates API usage statistics from MongoDB and writes info.json. Reads go through MongoDBHandler — no raw pymongo here.
+# @description: Offline script that aggregates API usage statistics from MongoDB and writes info.json. Reads go through the DataStore returned by get_database() — no raw pymongo here.
 from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
@@ -22,7 +22,7 @@ def main() -> None:
     Reads prod usage records first, then enriches them with a second pass
     against the dev/analysis mirror (`tmp_service_usage`). Both reads go
     through the shared handler — this script no longer opens its own Mongo
-    connection, which was the last leaked `MongoClient` in the codebase.
+    connection.
     """
     db = get_database()
 
