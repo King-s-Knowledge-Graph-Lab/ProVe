@@ -185,3 +185,5 @@ utils/secrets.py
 db/
 tmp/
 .claude/settings.local.json
+
+prove-api/plotly-cloud.toml
