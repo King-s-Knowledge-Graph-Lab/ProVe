@@ -13,19 +13,41 @@ dashboard to Plotly Cloud in one shot:
 
 ## One-time setup
 
-The publish step authenticates with a static API key instead of the
-interactive OAuth login, so it can run unattended from cron.
+The Plotly Cloud CLI needs credentials cached on the machine that will run
+cron before it can publish unattended.
 
-1. Generate an API key from your Plotly Cloud account settings.
-2. Put it in a gitignored `.env` file at `prove-dashboard/.env`:
+### Free plan (default)
 
-   ```
-   PLOTLY_API_KEY=your-key-here
-   ```
+Static API keys (`PLOTLY_API_KEY`) are a Pro-plan feature, so free-plan
+publishing has to go through the normal device-code login instead — but
+only **once**. The CLI caches a refresh token to `~/.plotly-cloud` and
+auto-refreshes it on every subsequent `plotly app publish` call, so cron
+never has to open a browser after this step.
 
-   (Cron runs with a near-empty environment, so exporting it only in your
-   interactive shell won't reach the script — the `.env` file is what makes
-   it available.)
+On the server (or wherever cron will run), as the same user cron will run
+as:
+
+```
+./prove-dashboard/.venv/bin/plotly user login --no-browser
+```
+
+`--no-browser` prints a verification URL + device code instead of trying to
+launch a browser on the headless box — open that URL on your phone/laptop
+and approve it there. Once it says "Successfully logged in", `~/.plotly-cloud`
+holds the cached credentials the cron job will reuse.
+
+### Pro plan (optional, if you upgrade)
+
+If you're on a Pro plan or higher, you can skip the login step above and use
+a static API key instead: generate one from your Plotly Cloud account
+settings, then put it in a gitignored `.env` file at `prove-dashboard/.env`:
+
+```
+PLOTLY_API_KEY=your-key-here
+```
+
+`update_dashboard.sh` prefers `PLOTLY_API_KEY` when present and falls back
+to the cached OAuth login otherwise.
 
 ## Registering the hourly cron job
 
