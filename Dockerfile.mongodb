@@ -1,0 +1,8 @@
+FROM mongo:7.0
+
+# Allow connections from the host machine and other containers on the local network
+CMD ["mongod", "--bind_ip_all", "--port", "27017"]
+
+EXPOSE 27017
+
+VOLUME ["/data/db", "/data/configdb"]
