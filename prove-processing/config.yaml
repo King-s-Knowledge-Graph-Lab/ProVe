@@ -57,7 +57,7 @@ database:
   auto_fallback_on_read: false
 
   mongo:
-    connection_string: "mongodb://host.docker.internal:27017/"
+    connection_string: "mongodb://mongo:27017/" # Use compose service name for container-to-container networking.
     max_retries: 3
 
   # TODO: populate when the Postgres migration begins.

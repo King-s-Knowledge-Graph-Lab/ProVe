@@ -1,0 +1,75 @@
+services:
+  mongo:
+    build:
+      context: .
+      dockerfile: Dockerfile.mongodb
+    container_name: prove-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' mongodb://localhost:27017/admin | grep 1 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+
+  prove-api:
+    build:
+      context: .
+      dockerfile: prove-api/Dockerfile
+    container_name: prove-api
+    restart: no
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/
+      - PROVE_API_KEY=changeme
+    ports:
+      - "8000:8000"
+    volumes:
+      - type: bind
+        source: ./reference_checked.db
+        target: /data/reference_checked.db
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/config', timeout=5)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  prove-processing:
+    build:
+      context: .
+      dockerfile: prove-processing/Dockerfile.main_service
+    container_name: prove-processing-main
+    restart: no
+    depends_on:
+      mongo:
+        condition: service_healthy
+      prove-api:
+        condition: service_healthy
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/
+      - PROVE_ENDPOINT=http://prove-api:8000/api/internal/
+      - PROVE_API_KEY=changeme
+      - PYTHONPATH=/workspace
+    volumes:
+      - ./models:/home/ubuntu/RQV/base
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - capabilities: ["gpu"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  mongo_data:
+  mongo_config:
